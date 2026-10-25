@@ -1,0 +1,98 @@
+"""Independent of OR-Tools: never trusts a solver or language model's counts."""
+
+from itertools import combinations
+from .domain import Day, Placement, canonical_pair
+
+
+def overlaps(day, pa, pb, acts):
+    if pa.stage_id == pb.stage_id:
+        return 0
+    return max(
+        0,
+        min(pa.start + acts[pa.act_id].duration, pb.start + acts[pb.act_id].duration)
+        - max(pa.start, pb.start)
+        + day.buffer,
+    )
+
+
+def audit(day: Day, placements: list[Placement], edges: list[dict], budget=None):
+    acts = {a.id: a for a in day.acts}
+    stages = {s.id: s for s in day.stages}
+    draft = {p.act_id: p for p in day.draft}
+    ps = {p.act_id: p for p in placements}
+    errors = []
+    if len(placements) != len(acts) or set(ps) != set(acts):
+        errors.append("Every act must appear exactly once")
+    if len(ps) != len(placements):
+        errors.append("Duplicate act placement")
+    moved = []
+    displacement = 0
+    for p in placements:
+        a = acts.get(p.act_id)
+        s = stages.get(p.stage_id)
+        if a is None or s is None:
+            errors.append("Unknown act or stage")
+            continue
+        end = p.start + a.duration
+        if p.stage_id not in a.allowed_stages:
+            errors.append(f"{a.name}: stage incompatible")
+        if p.start % day.grid:
+            errors.append(f"{a.name}: off time grid")
+        if p.start < a.earliest or end > a.latest:
+            errors.append(f"{a.name}: outside availability")
+        if p.start < s.opens or end + a.changeover > s.closes:
+            errors.append(f"{a.name}: stage hours/changeover violated")
+        changed = p != draft[a.id]
+        if changed:
+            moved.append(a.id)
+            displacement += abs(p.start - draft[a.id].start)
+        if a.locked and changed:
+            errors.append(f"{a.name}: locked placement changed")
+        for o in day.outages:
+            if (
+                o.stage_id == p.stage_id
+                and p.start < o.end
+                and end + a.changeover > o.start
+            ):
+                errors.append(f"{a.name}: stage on hold")
+    for pa, pb in combinations(placements, 2):
+        if pa.act_id not in acts or pb.act_id not in acts:
+            continue
+        if pa.stage_id == pb.stage_id:
+            aa, ab = acts[pa.act_id], acts[pb.act_id]
+            if (
+                pa.start < pb.start + ab.duration + ab.changeover
+                and pb.start < pa.start + aa.duration + aa.changeover
+            ):
+                errors.append(f"{aa.name} / {ab.name}: stage overlap or changeover")
+    if budget is not None and len(moved) > budget:
+        errors.append("Move budget exceeded")
+    ignored = {canonical_pair(p.a, p.b) for p in day.intentional}
+    conflicts = []
+    totals = {"must_see": 0, "qloo": 0, "unknown": 0, "genre": 0, "listenbrainz": 0}
+    minutes = 0
+    for e in edges:
+        if (
+            e["a"] not in ps
+            or e["b"] not in ps
+            or canonical_pair(e["a"], e["b"]) in ignored
+        ):
+            continue
+        overlap = overlaps(day, ps[e["a"]], ps[e["b"]], acts)
+        if overlap > day.threshold:
+            conflicts.append({**e, "minutes": overlap})
+            totals[e["source"]] += e.get("weight", 1)
+            if e["source"] in {"qloo", "genre"} or (
+                e["source"] == "unknown" and day.unknown_policy == "cautious"
+            ):
+                minutes += overlap
+    return {
+        "passed": not errors,
+        "errors": errors,
+        "counts": totals,
+        "conflicts": conflicts,
+        "moved": moved,
+        "moves": len(moved),
+        "displacement": displacement,
+        "cue_overlap_minutes": minutes,
+    }

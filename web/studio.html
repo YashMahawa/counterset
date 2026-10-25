@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Counterset — schedule desk</title>
+    <link rel="stylesheet" href="/web/style.css" />
+    <script src="/web/studio.js" defer></script>
+  </head>
+  <body class="studio" data-ui>
+    <header class="desk-header">
+      <a class="wordmark" href="/">Counterset</a>
+      <nav aria-label="Workspace">
+        <button class="tab active" data-view="board">Schedule</button
+        ><button class="tab" data-view="evidence">Evidence</button
+        ><button class="tab" data-view="compare">Compare</button>
+      </nav>
+      <button id="real-day" class="quiet" disabled>Historical day</button
+      ><button id="new-day" class="quiet">New day</button>
+    </header>
+    <main class="desk">
+      <div class="desk-title">
+        <div>
+          <h1 id="day-name">Schedule desk</h1>
+          <p id="day-meta">Loading your workspace…</p>
+        </div>
+        <div class="actions">
+          <label class="file-button"
+            >Import JSON<input
+              type="file"
+              id="import"
+              accept="application/json" /></label
+          ><button id="edit-json" class="quiet">Edit facts</button
+          ><button id="export" class="quiet" disabled>Export version</button>
+        </div>
+      </div>
+      <div id="context"></div>
+      <div id="notice" role="status" aria-live="polite"></div>
+      <div id="busy" class="busy" hidden>
+        <span id="busy-label">Working…</span
+        ><progress id="progress" max="1"></progress>
+      </div>
+      <div class="workspace-grid">
+        <div class="workspace-main">
+          <section id="board-view" class="view">
+            <div class="board-toolbar">
+              <div class="switch">
+                <button id="show-draft" class="selected">Current grid</button
+                ><button id="show-proposal">Proposed grid</button>
+              </div>
+              <button id="hold" class="quiet">Stage hold</button>
+            </div>
+            <div class="metric-strip" id="metrics"></div>
+            <div id="timeline" class="timeline"></div>
+            <p class="small" id="fixture-note">
+              Select an act to edit its production facts.
+            </p>
+            <div id="changes" class="changes"></div>
+            <section class="survey">
+              <h2>Attendee must-sees</h2>
+              <p>
+                Enter an actual reported pair. These conflicts take priority
+                over association cues.
+              </p>
+              <form id="survey-form">
+                <select
+                  id="survey-a"
+                  aria-label="First must-see artist"
+                ></select
+                ><select
+                  id="survey-b"
+                  aria-label="Second must-see artist"
+                ></select
+                ><input
+                  id="survey-weight"
+                  aria-label="Number of respondents"
+                  type="number"
+                  value="1"
+                  min="1"
+                  max="100000"
+                /><button type="submit">Add pair</button>
+              </form>
+              <div id="survey-list"></div>
+            </section>
+          </section>
+          <section id="evidence-view" class="view" hidden>
+            <h2>The fixed-lineup graph</h2>
+            <p>
+              Each resolved artist ranks the same lineup. Reciprocal top-three
+              ranks are cues for review, never shared-fan counts.
+            </p>
+            <div id="evidence-content"></div>
+            <h2>Resolve an artist</h2>
+            <form id="resolve-form">
+              <label>Contracted act<select id="resolve-act"></select></label
+              ><label
+                >Search name<input
+                  id="resolve-query"
+                  placeholder="Artist name"
+                  required /></label
+              ><button>Find matches</button>
+            </form>
+            <div id="resolve-results"></div>
+          </section>
+          <section id="compare-view" class="view" hidden>
+            <h2>Same constraints. Different inputs.</h2>
+            <p>
+              The LLM-only arm uses the same production facts and move budget,
+              without the cultural graph or solver. Every schedule faces the
+              same independent checks.
+            </p>
+            <label for="comparison-model">Comparison model</label
+            ><select id="comparison-model">
+              <option value="gemini-3.5-flash-lite">
+                Gemini 3.5 Flash Lite · high
+              </option>
+              <option value="gemma-4-31b-it">Gemma 4 31B · high</option></select
+            ><button id="benchmark">Run comparison</button>
+            <div id="comparison"></div>
+            <p class="small">
+              Qloo cue counts measure the declared optimization objective. They
+              do not independently establish better fan experience.
+              Hard-constraint compliance and attendee-entered conflicts are
+              separate measures.
+            </p>
+          </section>
+        </div>
+        <aside class="control-desk">
+          <section>
+            <h2>Repair this grid</h2>
+            <label for="move-budget"
+              >Maximum changed acts <output id="budget-value">4</output></label
+            ><input id="move-budget" type="range" min="0" max="12" value="4" />
+            <p class="small">
+              An act counts once if its time or stage changes.
+            </p>
+            <label for="repair-priority">After reducing conflicts</label
+            ><select id="repair-priority">
+              <option value="fewest_acts">Change the fewest acts</option>
+              <option value="least_time_shift">
+                Keep start times closest
+              </option></select
+            ><button id="repair" class="primary">Find a repair</button>
+            <div id="proposal-summary"></div>
+            <button id="publish" hidden>Approve & publish</button>
+          </section>
+          <section>
+            <h2>Evidence source</h2>
+            <p id="coverage">No evidence loaded.</p>
+            <button id="recorded" class="quiet">Load recorded Qloo</button
+            ><button id="live" class="quiet">Query current lineup</button>
+            <p class="small" id="quota"></p>
+          </section>
+          <section>
+            <h2>Production notes</h2>
+            <p>
+              Turn an agent’s message into a proposed constraint. Review it
+              before anything changes.
+            </p>
+            <label for="model">Free-project model</label
+            ><select id="model">
+              <option value="gemma-4-31b-it">Gemma 4 31B · high</option>
+              <option value="gemini-3.5-flash-lite">
+                Gemini 3.5 Flash Lite · high
+              </option></select
+            ><textarea
+              id="note"
+              rows="3"
+              placeholder="Flying Lotus cannot start before 17:00."
+            ></textarea
+            ><button id="parse-note" class="quiet">Interpret note</button>
+            <div id="notes"></div>
+          </section>
+          <section>
+            <h2>Decision trace</h2>
+            <ol id="trace">
+              <li>Load evidence</li>
+              <li>Validate production facts</li>
+              <li>Solve within move budget</li>
+              <li>Independently check proposal</li>
+              <li>Programmer approves</li>
+            </ol>
+          </section>
+        </aside>
+      </div>
+    </main>
+    <dialog id="editor">
+      <form id="editor-form">
+        <div class="dialog-header">
+          <h2 id="editor-title">Edit act</h2>
+          <button type="button" id="close-editor" class="quiet">Close</button>
+        </div>
+        <div id="editor-fields"></div>
+        <button type="submit">Apply changes</button>
+        <p class="small">
+          Changing facts invalidates open proposals. The original published
+          versions remain available.
+        </p>
+      </form>
+    </dialog>
+    <footer class="desk-footer">
+      Counterset
+      <span>Qloo evidence → constrained repair → programmer approval</span
+      ><button id="auth" class="quiet">Access token</button>
+    </footer>
+  </body>
+</html>

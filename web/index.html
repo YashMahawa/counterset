@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Audit and repair a festival timetable with Qloo cultural evidence, explicit production constraints and independent schedule validation."
+    />
+    <title>Counterset — keep the acts, fix the grid</title>
+    <link rel="stylesheet" href="/web/style.css" />
+    <script src="/web/landing.js" defer></script>
+  </head>
+  <body class="landing">
+    <header class="site-header">
+      <a href="/" class="wordmark">Counterset</a>
+      <nav aria-label="Main">
+        <a href="#workspace">Workspace</a><a href="#method">Method</a
+        ><a href="#evidence">Evidence</a
+        ><a class="button" href="/studio">Open studio</a>
+      </nav>
+    </header>
+    <main>
+      <section class="hero">
+        <h1><span>Keep the acts</span><span>Fix the grid</span></h1>
+        <div class="hero-stage">
+          <img
+            src="/web/assets/grid-portrait.png"
+            width="640"
+            height="900"
+            alt="Counterset's working timetable with fixed acts, stage columns and overlap warnings"
+          />
+        </div>
+        <div class="hero-intro">
+          <p class="motion">
+            Repair a festival timetable using cultural associations and
+            production constraints, with every change under your control.
+          </p>
+          <a href="/studio" class="button hero-live motion">Open studio</a>
+        </div>
+        <p class="hero-fact motion">
+          The lineup is signed.<br />The timing is still yours.
+        </p>
+      </section>
+      <section class="showcase" id="workspace">
+        <h2 class="motion">Make the next move count</h2>
+        <p class="motion">
+          Review simultaneous sets, pin the contracts you cannot move, and
+          inspect a proposed repair before approving a new version.
+        </p>
+        <div class="screens">
+          <img
+            class="motion"
+            src="/web/assets/grid.png"
+            width="1200"
+            height="850"
+            alt="Working schedule desk with three stages, locked acts and a bounded repair control"
+            loading="lazy"
+          />
+          <div class="screen-detail">
+            <img
+              class="motion"
+              src="/web/assets/proposal.png"
+              width="1000"
+              height="650"
+              alt="Actual proposed schedule with changed placements highlighted and independently checked"
+              loading="lazy"
+            />
+            <p class="motion">
+              Every proposal carries its source snapshot, changed-act count,
+              solver status and validator result. Edited facts make old
+              proposals stale.
+            </p>
+          </div>
+        </div>
+      </section>
+      <section class="method" id="method">
+        <div class="method-intro">
+          <h2 class="motion">Evidence first</h2>
+          <p class="motion">
+            Qloo compares artists inside your exact lineup. Reciprocal ranks
+            flag pairs to review. Actual attendee must-see selections take
+            priority.
+          </p>
+        </div>
+        <div class="method-steps">
+          <div>
+            <h3 class="motion">Keep the facts</h3>
+            <p class="motion">
+              Artist windows, stages, set lengths, changeovers, locks and
+              curfews come from production. They remain hard constraints.
+            </p>
+          </div>
+          <div>
+            <h3 class="motion">Find the repair</h3>
+            <p class="motion">
+              Set a maximum number of changed acts. The solver reduces
+              conflicts, then minimizes changes at the achieved target.
+            </p>
+          </div>
+          <div>
+            <h3 class="motion">Approve the version</h3>
+            <p class="motion">
+              A separate validator checks the proposal. You review the diff and
+              publish an immutable schedule export.
+            </p>
+          </div>
+        </div>
+      </section>
+      <section class="proof" id="evidence">
+        <h2 class="motion">Inspect the evidence</h2>
+        <p class="motion">
+          The rehearsal day uses real recorded Qloo responses with an
+          illustrative timetable. You can also resolve artists and query your
+          own lineup.
+        </p>
+        <table class="motion">
+          <thead>
+            <tr>
+              <th>Check</th>
+              <th>What it establishes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Exact catalogue</td>
+              <td>
+                Each of the twelve recorded artist rows returned eleven scored
+                peers.
+              </td>
+            </tr>
+            <tr>
+              <td>Order control</td>
+              <td>
+                Reversing the candidate list left one seed's ID-to-score mapping
+                unchanged.
+              </td>
+            </tr>
+            <tr>
+              <td>Independent validation</td>
+              <td>
+                A proposal must satisfy production rules before publication.
+              </td>
+            </tr>
+            <tr>
+              <td>Comparison desk</td>
+              <td>
+                Run an LLM-only schedule and a genre-based repair under the same
+                constraints.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <img
+          class="motion evidence-picture"
+          src="/web/assets/evidence.png"
+          width="1200"
+          height="720"
+          alt="Actual evidence view showing artist pairs and reciprocal within-lineup ranks"
+          loading="lazy"
+        />
+      </section>
+      <section aria-label="Questions">
+        <div class="faq-title">
+          <h2 class="motion">Before the announcement</h2>
+        </div>
+        <div class="faq-row">
+          <h3 class="motion">Does a cue mean shared fans?</h3>
+          <p class="motion">
+            It means aggregate cultural association. Counterset keeps those cues
+            separate from actual attendee selections and unknown relationships.
+            It does not forecast attendance.
+          </p>
+        </div>
+        <div class="faq-row">
+          <h3 class="motion">Can I keep an intentional clash?</h3>
+          <p class="motion">
+            Yes. Declare intentional pairs in the production facts or lock an
+            act to its current placement. The solver respects those choices.
+          </p>
+        </div>
+        <div class="faq-row">
+          <h3 class="motion">What if the day is impossible?</h3>
+          <p class="motion">
+            The studio reports infeasibility and a conflicting constraint set.
+            It preserves durations, locks and curfews while you decide what can
+            change.
+          </p>
+        </div>
+        <div class="faq-row">
+          <h3 class="motion">What happens to the model’s notes?</h3>
+          <p class="motion">
+            Gemma or Flash Lite extracts a proposed constraint with its original
+            quote. Nothing changes until the programmer approves it.
+          </p>
+        </div>
+      </section>
+      <a href="/studio" class="cta"
+        ><p class="motion">
+          Open the rehearsal day and inspect your first repair.
+        </p>
+        <strong class="motion">Open studio</strong></a
+      >
+    </main>
+    <footer class="site-footer">
+      <a class="wordmark" href="/">Counterset</a>
+      <p>
+        Built with Qloo. Interface images are screenshots of this
+        application.<br />Rehearsal artists are real; the festival and
+        operational facts are illustrative.
+      </p>
+    </footer>
+  </body>
+</html>

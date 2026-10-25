@@ -1,0 +1,12 @@
+.venv/
+.private/
+.env
+.env.*
+!.env.example
+__pycache__/
+.pytest_cache/
+*.sqlite*
+*.pyc
+.taste-skill/inspect/
+test-results/
+node_modules/
