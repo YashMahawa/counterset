@@ -48,7 +48,7 @@ Both use Qloo's reciprocal rule: each act must be in the other's top *k* within 
 
 ## Do published grids already avoid these pairs?
 
-A permutation test reassigns the same acts to the same published slots 20,000 times. If programmers deliberately separated a signal's pairs, the real grid should clash less than most random fills.
+A permutation test reassigns the same acts to the same published slots 20,000 times. If programmers deliberately separated a signal's pairs, the real grid should clash less than most random fills. The app runs 4,000 fills with the same seed, so it shows 70% for the Lollapalooza Qloo row (69.7%) where this table shows 69% (69.5%).
 
 | Day | Signal | Pairs | Real-grid clashes | Random mean | Share of fills as good or better |
 | --- | --- | ---: | ---: | ---: | ---: |
