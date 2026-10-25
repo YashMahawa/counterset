@@ -1,37 +1,65 @@
-# Decision contract
+# Architecture and decision contract
 
-## Ownership
+## Who owns what
 
-The programmer owns lineup, windows, locks, stages, curfews, changeovers, intentional clashes and reported attendee pairs. Qloo owns returned aggregate associations. The application's declared reciprocal-rank rule produces conflict cues. The model owns no operational facts. Every proposed model extraction carries an exact note quote and awaits human approval.
+| Fact | Owner | Where it lives |
+| --- | --- | --- |
+| Bill, set lengths, stages, availability, changeovers, curfews, locks, intentional clashes | The programmer | `Day` (versioned) |
+| Attendee must-see pairs | The programmer, from a real survey | `Day.must_see`, highest priority |
+| Who each act is | A person confirms a Qloo search result | `Act.qloo_id`, `Act.kind` |
+| How acts relate | Qloo responses, read as within-response ranks | Evidence snapshot (ranks only, no raw scores) |
+| Which repair is feasible and best | CP-SAT, then an independent validator | Proposal (immutable) |
+| What a production message says | A model proposes; the controller checks; a person ticks | Note with per-item status |
+| What gets published | A person | Published version (immutable) |
 
-## Durable objects
+## Evidence
 
-SQLite stores projects, evidence snapshots inside versioned projects, immutable proposals, notes, published versions, comparison reports and jobs. Mutations use a process lock and expected-version check. This is a single-process local deployment; multiple web workers are not supported. Publishing verifies the proposal's project, version and complete input hash, then independently validates placements and counts again.
+Each act maps to one Qloo entity type: `artist` → `urn:entity:artist`; `comedian` and `speaker` → `urn:entity:person`; `podcast` → `urn:entity:podcast`. For every confirmed act (the seed) and every type on the bill, one `/v2/insights` request sets `filter.type` to that type, `signal.interests.entities` to the seed and `filter.results.entities` to every confirmed act of that type, with `take` equal to their number.
 
-## Evidence gate
+A row is complete only if it returns exactly the requested acts minus the seed, each with a finite affinity, with no duplicates, no self and no extras. Rank is 1 + the number of strictly higher scores, so ties expand a cutoff. Raw affinities from different requests are never compared, normalised or stored in the snapshot; the snapshot holds ranks, row sizes, coverage errors and provenance (live, cache or missing, and when each row was fetched).
 
-Each seed queries the same resolved artist universe, capped at 50. The gate rejects missing, duplicate, extra, self and non-finite results. Ranks count strictly greater scores so ties at a cutoff expand the set. Reciprocal top-k creates an undirected cue from two directional observations; request-order invariance does not establish symmetry. One reversed-order seed is a limited stability control. Incomplete rows produce unknown relationships, never invented zeroes. Identity/k changes invalidate evidence. Other fact changes invalidate proposals through the project version.
+A pair is a **cue** when each act ranks the other within the top *k* of the other's kind, where *k* (default 3) is capped at a quarter of the acts of that kind (`ceil(n/4)`). A cross-kind cue therefore means "her closest musician on this bill, and his closest comedian". A pair with any incomplete row is **unknown**. Unknown pairs are reported and, by default, not optimised; the cautious policy counts them, visibly. One reversed-candidate-order request per bill is a stability control; if it disagrees, every cue is disabled for that snapshot.
 
-## Optimization
+Changing any identity, kind or *k* clears the evidence. Evidence older than 14 days is marked stale and blocks publication until refreshed.
 
-Optional intervals assign each act to exactly one permitted stage. Start times sit on the declared grid. Availability, stage opening/curfew including changeover, locks, no-overlap and outages are hard constraints. Each paired overlap is separately reified. Attendee weights are aggregated by canonical unordered pair. The overlap buffer is applied once.
+## Audit
 
-Lexicographic passes minimize: attendee conflicts; cues (including unknown only under an explicit cautious policy); changed acts; overlap minutes; absolute start displacement. Each proven objective is fixed before the next pass. If any pass is merely FEASIBLE, no later pass proceeds and the whole hierarchy is labelled FEASIBLE. UNKNOWN without an incumbent produces no proposal. Results include objective values/bounds by pass. Multiple equal optima can have different placements; deterministic output is not promised under wall-clock limits.
+For the current grid the validator lists every cue pair overlapping by more than the threshold (10 minutes) on different stages. `stats.random_fill` reassigns the same acts to the same slots 4,000 times with a fixed seed and reports the share of fills that clash as little or less, with the full distribution. It answers "is this grid more careful than chance?", not "will people attend".
 
-The operator can instead prioritize total start-time displacement before changed-act count, after the same attendee/cue objectives. This is an explicit versioned production preference, not a model-chosen weight. Both modes use identical constraints and independent recounts.
+## Repair
 
-The independent validator imports no solver code. It recounts every published metric, checks all placement rules and compares the objective values with the solver's reported values. A mismatch stops the operation. An infeasibility core is sufficient, never called smallest. Fixed stage rules may contribute to infeasibility without appearing as relaxable assumptions.
+`solver.build` creates optional intervals per stage, a start variable on the time grid, and named guard literals for every relaxable rule: each act's availability, each lock, each stage hold and the move limit. Stage exclusivity with changeovers and stage hours are fixed. Curfew binds the set's end; changeover only separates consecutive sets.
 
-## Finite agent workflow
+`solver.solve` runs lexicographic passes, fixing each proven optimum before the next:
 
-`facts → identity confirmation → evidence job → coverage gate → audit → bounded solve → independent recount → proposal → human approval → versioned export`.
+1. weighted attendee must-see conflicts
+2. Qloo cue conflicts (plus unknown pairs under the cautious policy)
+3. the programmer's preference, then tie-breaks: **fewest changed acts** orders changed acts → overlap minutes of remaining cue conflicts → total start shift; **closest start times** orders total start shift → changed acts → overlap minutes
 
-The model can propose one quoted constraint from a note. The controller validates its schema, identity, time range and source quote, persists it as pending and requires approval against the same input version. The model cannot call insights, approve a constraint, change solver priorities, relax locks or publish. The comparative LLM path returns a proposed placement list, which the independent validator can reject. No model-produced number is trusted as a measured count.
+If any pass is only FEASIBLE within the time limit, later passes stop and the option is labelled FEASIBLE, never minimal. UNKNOWN with no incumbent returns no schedule and says this is not a proof of infeasibility.
 
-## Provider behavior
+When the rules are infeasible, OR-Tools' sufficient assumptions are reduced by a deletion filter: each rule is dropped in turn and kept only if the remaining rules become satisfiable. The result is irreducible when every check was decided; otherwise it says so.
 
-Requests are allowlisted by provider endpoint/model. Only the existing free-project credential variable/file is read for models. Server-side caches and logs omit keys. All requests are counted; Qloo successes are capped with a configured historical offset, and model attempts are capped separately. Temporary 500/502/503/429 responses have bounded retries with spacing; a Retry-After cooldown is respected. A failed job applies no schedule change. Restarted in-flight jobs become retryable failures; already successful Qloo responses remain cached.
+`repair.plan` solves both preferences, then solves each again with every Qloo cue removed under the same facts, budget and preference. `without_qloo.protected` lists cue pairs that the blind repair leaves clashing and the evidence-aware repair keeps apart. Identical blind and aware schedules are labelled "Qloo did not change this repair". Equal options are collapsed.
 
-## Boundaries
+The validator imports no solver code. It recounts every rule, every conflict and every objective value; a disagreement with the solver raises instead of returning a proposal.
 
-No ticketing integration, crowd-size prediction, automated outreach, real-time emergency command system or representative audience experiment is claimed. A common shared token protects one workspace when exposed beyond localhost. Multi-tenant authentication, a durable distributed queue and native production-platform integrations would require additional work.
+## Agent
+
+The disruption agent is a finite controller around deterministic tools:
+
+`message → Gemma proposes ≤5 typed items with exact quotes → controller checks each (known act/stage, HH:MM time, window still satisfiable, exact quote) → person ticks items → one new version → solver (both preferences + counterfactual) → validator → optional Flash Lite briefing → person approves an option → immutable version`.
+
+Allowed item types: stage hold, not before, finish by, lock, unsupported. Anything else (cancellations, crowd or safety instructions, ambiguous names or times) is returned as unsupported for a person. Items the controller rejects are shown as rejected with the reason, never silently dropped. The briefing may use only numbers present in the computed options; any other number replaces it with a deterministic summary and records why. Models cannot call Qloo, run the solver, approve, change locks or publish.
+
+## State and versions
+
+SQLite stores projects, proposals, notes, published versions, benchmarks and jobs. Every mutation checks the expected project version under a process lock. A proposal stores its input version and a hash of the day plus evidence id; publishing re-checks both, re-validates the placements and refuses stale or mismatched input. Approving creates an immutable version (with the previous placements and the counterfactual summary), makes it the new draft and marks the project published. Jobs run in a small thread pool; a restart marks in-flight jobs failed with nothing applied, and fetched Qloo rows remain cached.
+
+## Providers
+
+Requests are allowlisted (`/search`, `/v2/insights`; two Gemini models). Qloo calls are spaced at least 13 seconds apart under a file lock, counted against a durable ledger with the prior-use offset, and cached privately by request digest. Model attempts are capped. 429/500/502/503 responses retry with backoff; a 400 drops the JSON MIME hint once; incomplete responses report their finish reason. A failed job applies nothing.
+
+## Interface
+
+The studio is one page over the same API. The run sheet's six chapters (The bill, Shared crowds, Audit the grid, Something changes, Choose a repair, Approve) each read their state from the server and perform real actions; Desk mode shows the same tools without narration. Sets are absolutely positioned tiles keyed by act, so switching between the draft, an option and its without-Qloo counterfactual slides the same elements to their new slots, leaves an outline where each moved set was, and redraws the clash threads. Holds drop into their lane. Reduced-motion users get the same states without travel. The strict CSP (`style-src 'self'`) is kept by applying geometry through the CSSOM.

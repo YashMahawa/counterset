@@ -1,67 +1,70 @@
 # Counterset
 
-Keep the acts. Fix the grid.
+The clash desk for festival programmers. Counterset asks Qloo how every act on a bill relates to every other act, including comedians and live podcasts, then repairs the timetable around real production rules so acts that share a crowd stop playing against each other. When something breaks on the day, an agent reads the message, a solver proposes repairs, and Counterset shows exactly what the Qloo evidence changed before a person approves a numbered version.
 
-Counterset audits and repairs a festival timetable after the lineup is booked. Qloo supplies association cues over exactly the contracted artist catalogue. A constraint solver proposes a repair, a separate validator recounts its objectives and checks production rules, and a programmer approves an immutable version.
+- **Keeps the bill.** Only start times and stages move, inside availability, changeovers, stage hours, curfews and locks.
+- **Ranks exactly your bill.** One Qloo request per act and kind of act ranks the other acts of that kind on the bill. Ranks are read inside one response and never compared across responses.
+- **Shows its counterfactual.** Every repair is solved a second time with all Qloo cues removed. The difference is named pair by pair, or the app says Qloo changed nothing.
+- **Never guesses.** Unconfirmed identities stay unresolved. Their pairs are unknown, not zero. Infeasible rule sets are reported, reduced to the rules that actually conflict.
 
 ## Run locally
 
-Python 3.12 is tested. Create an isolated environment and install the pinned requirements:
+Python 3.12 is tested.
 
-```sh
-python3.12 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+```bash
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements.lock.txt
+```
+
+```bash
 cp .env.example .env
-# Edit .env to reference your Qloo env file and existing free-project Gemini env file.
+```
+
+Edit `.env` so `QLOO_ENV_FILE` and `GEMINI_ENV_FILE` point at files holding your keys. Keys are read server-side only and are never sent to the browser, logged or cached.
+
+```bash
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8877
 ```
 
-Open http://127.0.0.1:8877 and choose **Open studio**. The API contract is at `/api/docs`.
+Open http://127.0.0.1:8877 for the public page and http://127.0.0.1:8877/studio for the application. The API contract is at `/api/docs`.
 
-The server reads `GEMINI_FREE_API_KEY` from the configured `GEMINI_ENV_FILE`. The supported models are `gemma-4-31b-it` and `gemini-3.5-flash-lite`, using high thinking. There is no paid-key fallback. Model calls are optional: evidence, optimization, editing, validation and export work without a language model.
+### Worked examples
 
-Raw Qloo data, provider caches, call ledgers, SQLite state and configuration are private and ignored by Git. This repository does **not** contain credentials or recorded Qloo payloads. On the original workstation, those recordings have been imported privately. A fresh clone must resolve its artists in Evidence, confirm each search match, and query the lineup with its own Qloo key. Missing identities stay unscored. The UI never manufactures a demonstration graph.
+Raw Qloo responses must not be published, so the repository ships no Qloo data. The example days are rebuilt into the ignored `.private/` folder:
 
-For the existing research workspace only, `scripts/import_private_evidence.py /path/to/Qloo` imports the twelve existing rows into `.private/recorded.json` without copying a key. The rehearsal festival, slots, production constraints and broad genre labels are illustrative; the artists and privately loaded Qloo responses are real.
+```bash
+.venv/bin/python scripts/build_lolla.py
+```
 
-## Working flow
+```bash
+.venv/bin/python scripts/build_rehearsal.py
+```
 
-- Create a rehearsal day or import a `Day` JSON document. All times are local minutes after midnight. Cross-midnight values up to 2880 are supported by the data/solver; the current clock editor is intended for a single calendar day.
-- Confirm artist identities, then load recorded evidence or query the current lineup. Live evidence requires one request per resolved artist plus one order-control request, conservatively spaced at least thirteen seconds apart. Successful responses are cached so a repeated job can reuse them.
-- Inspect complete/incomplete rows and reciprocal within-row top-three ranks. Scores from different rows are never compared directly. Unknown pairs remain separate. A failed order check disables association edges for that snapshot.
-- Add actual attendee must-see pairs if available, then set a move budget and request a repair. After weighted attendee conflicts and association conflicts, choose **fewest changed acts** or **closest start times**. The latter prevents a single large delay from automatically beating several short shifts. Intentional clashes and the cautious unknown policy are editable in the JSON facts.
-- Inspect the changed placements. **Keep original** pins the act to its current draft placement. Edit a constraint, then re-solve. A model can extract a proposed time/lock constraint from a note, with an exact source quote; it cannot apply it.
-- Approve a validated proposal. Publishing checks the current version and evidence hash, revalidates, creates an immutable record and makes that schedule the next draft baseline. Export JSON or CSV.
-- A stage hold creates a new outage constraint and locks sets already started. It can make the day infeasible; the application never silently shortens sets or extends curfews.
+`build_lolla.py` reads the committed public timetable in `scripts/sources/`, resolves identities with `/search`, applies the identity decisions in `.private/lolla/identity_decisions.json`, and fetches the exact-bill rows (about 75 calls the first time; cached after). `build_rehearsal.py` builds the music, comedy and podcast rehearsal day (about 80 calls). `build_lenses.py` adds the independent MusicBrainz and ListenBrainz lenses used by the evidence comparison. Without these files the studio still works: open the blank rehearsal day, confirm identities and query your own bill.
 
-## Why this is more than an LLM schedule
+## Models
 
-The model does not invent cultural measurements, approve artist matches or publish operational changes. Qloo supplies bounded evidence; CP-SAT enforces time/stage/changeover constraints; a separate pure-Python validator checks the result and objective counts. A feasible schedule and an optimal schedule have different labels. “Fewest changes” is scoped to the achieved higher-priority objectives within the selected budget, never an unsupported global claim.
-
-The Compare screen runs a no-change reference, a declared-genre solver, the Qloo solver and an LLM-only schedule with the same facts and move limit. It independently checks operational validity. **Qloo cue reduction evaluates the Qloo objective itself; it is not proof of better fan experience or superiority over public similar-artist data.** Actual attendee preferences and programmer review are the next value tests. See [evaluation](docs/EVALUATION.md).
+The server uses the existing free-project Gemini key (`GEMINI_FREE_API_KEY`) with `gemma-4-31b-it` (reads production messages) and `gemini-3.5-flash-lite` (briefings and the LLM-only comparison), both with high thinking. There is no paid-key fallback and no silent model switch. Everything except reading messages and briefings works without a model.
 
 ## Tests
 
-```sh
+```bash
 .venv/bin/python -m pytest -q
 ```
 
-Tests compare a small solver instance with exhaustive enumeration, check locks and priority ordering, unknown/intentional-pair rules, malformed coverage, validator errors, stale publication, same-origin mutations and pending model constraints.
+Real-click browser walkthrough (needs Playwright on `NODE_PATH` and Chrome at `CHROME_PATH`; uses cached rows and no model calls unless `COUNTERSET_MODEL=1`):
 
-Optional browser test: install Playwright in your tooling environment and expose it via `NODE_PATH`, set `CHROME_PATH` to Chrome, then run `node scripts/browser_test.cjs` with the server running. It exercises real clicks from new day through recorded evidence, repair, graph inspection and publish, and captures the interface at desktop/mobile widths. The original workstation uses its bundled Playwright runtime.
+```bash
+node scripts/browser_test.cjs
+```
 
-`scripts/smoke_live.py` performs explicitly bounded live checks, writing private results. It may use one Qloo request if not cached, one model note and two model schedule comparisons, plus bounded retries/native JSON fallback. It never prints a key. Do not run it as a routine unit test.
+## Layout
+
+`app/domain.py` facts and schemas · `evidence.py` exact-bill rows, ranks, unknowns · `solver.py` lexicographic CP-SAT and core reduction · `repair.py` options and the without-Qloo counterfactual · `stats.py` random-fill audit · `validator.py` independent recount · `agent.py` bounded model steps · `providers.py` server-only calls, cache, quotas · `main.py` versioned API · `web/` public page and studio.
+
+Docs: [architecture](docs/ARCHITECTURE.md) · [validation](docs/VALIDATION.md) · [evaluation](docs/EVALUATION.md) · [landscape](docs/LANDSCAPE.md) · [design review](docs/DESIGN_REVIEW.md) · [submission text and demo script](docs/SUBMISSION.md).
 
 ## Deployment boundary
 
-Localhost is the default. Set a long `COUNTERSET_ACCESS_TOKEN` before exposing the server; the studio's Access token control stores it for that browser session. Use TLS at the reverse proxy. This is one protected producer workspace, not a multi-tenant service. In-memory jobs are marked retryable after a server restart; the private provider cache avoids repeating successful evidence calls.
+Localhost by default. Before exposing the server, set a long `COUNTERSET_ACCESS_TOKEN` and put TLS in front. It is one protected workspace in one process, not a multi-tenant service. The Qloo success counter includes `QLOO_PRIOR_SUCCESS` for earlier use of the same key and stops at `QLOO_SUCCESS_LIMIT` (5,000 maximum).
 
-The successful-call cap includes `QLOO_PRIOR_SUCCESS`, which must reflect previous use of the same key. The original workstation is configured with the previous approximately 213 successes and a total ceiling of 5000. Set `MODEL_CALL_LIMIT` to bound all model attempts. Retry behavior is limited; an unavailable provider produces a visible failure and never changes the schedule.
-
-## Project layout
-
-`app/domain.py`: facts and schemas. `evidence.py`: coverage and graph. `solver.py`: lexicographic CP-SAT. `validator.py`: independent checks. `agent.py`: bounded model tasks. `providers.py`: server-only calls/cache/quota. `store.py`: SQLite records. `main.py`: API and versioned controller. `web/`: landing page and working studio.
-
-The public page uses the taste skill's borrowed-category direction, seed 468507280: a concert poster carrying the actual timetable. The four interface images are genuine screenshots of this application. There are no invented customers, testimonials or audience results. Font credits and licenses are in `web/assets/`.
-
-License: MIT for application source. Third-party fonts retain their own licenses. No claim is made to ownership of artist names or Qloo data.
+License: MIT for the application source. Public Sans keeps its own SIL Open Font License. No claim is made to artist names, festival data or Qloo data. Not affiliated with Lollapalooza, Pitchfork or any performer.

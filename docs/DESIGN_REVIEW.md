@@ -1,45 +1,31 @@
-# Render review
+# Design direction and review
 
-Direction: borrowed-category, “Dressed as something else”, seed 468507280. The borrowed category is a concert poster. No palette/type redraw. The proof table uses real component checks instead of nonexistent awards. Four actual application screenshots supply the imagery; no found/bundled photographs or video are represented as the project.
+## Direction
 
-ROUND 1
-Seen in one second: a large festival-style instruction.
-Idea (one sentence): the fixed lineup becomes the poster, and its timetable is the visible product material.
-Live thing: Open studio leads to the functioning schedule repair desk.
-Layout words by section: hero=poster / workspace=dark paired screenshots / method=wide band / proof=table / questions=bands / close=large link.
-Scores: design 6.5 · usability 7 · creativity 7 · content 8 → overall 6.0 after cap.
-Caps applied: inspector headline failures.
-Top three problems (most visible first), each with the screenshot it shows in and the fix:
-1. Mobile hero wraps to three lines (mobile-fold.jpg): shorten the measure constraint and use a true two-line title.
-2. The portrait crop cuts off names (mobile-fold.jpg): contain the actual screen instead of cropping its left edge.
-3. Method heading wraps to three lines (desktop-page-01.jpg): cut to “Evidence first”.
+Dealt by the taste skill (`draw.mjs`, seed 1112188232): **dense-tiles, "the well-kept board"**, Soot and lime palette. Chosen over `type-only-statement` and `borrowed-category` because a festival timetable already is a board of tiles fitted edge to edge.
 
-ROUND 2
-Seen in one second: the same acts, in a timetable.
-Idea (one sentence): the repaired grid is presented as the festival's set-time sheet.
-Live thing: a working audit/repair/approve studio, reached through the primary action.
-Layout words by section: hero=poster / workspace=paired screenshots / method=band / proof=table / questions=bands / close=large link.
-Scores: design 7 · usability 8 · creativity 7 · content 8 → overall 7.4.
-Caps applied: none from headline/overflow checks; screenshots still too thin on phone.
-Top three problems (most visible first), each with the screenshot it shows in and the fix:
-1. Fixed image heights cause large blank letterboxing (mobile-page-01.jpg): use intrinsic image height.
-2. Full evidence screenshot is too long and tiny (desktop-page-02.jpg): capture an honest 720px fragment showing the graph header and pairs.
-3. Phone hero's supporting text arrives late (mobile-fold.jpg): keep the picture compact and the primary action visible in the first screen.
+Idea: *on this page, the festival timetable's sets become the board's tiles.* The run sheet is a departure board whose open row turns lime; the timetable is filled tiles separated by gaps, never lines; the public page's hero is a sheet of Counterset's own interface frames with one text cell.
 
-Final measurement and screenshot review are recorded in VALIDATION.md. No claim of an independent design-jury score is made. The source lint's zero-padding warning is legitimate clock formatting. The landing page has no borrowed footage: its moving picture is the real timetable capture with a small reduced-motion-aware drift. Extra decorative concert footage would not explain this product.
+One substitution, with its reason: the dealt General Sans loads from Fontshare, which the strict same-origin CSP and self-hosting rule out. The bundled Public Sans (SIL OFL) plays the sheet's "one grotesk in two weights". The earlier concert-poster direction and its condensed display face were retired.
 
-The lint's em-dash count comes from missing-value symbols in the real comparison table and page-title punctuation, not repeated rhetorical prose.
+## Studio
 
-ROUND 3
-Seen in one second: a concert-poster headline carrying a real timetable.
-Idea (one sentence): the booked artists remain, while the working schedule shows the editable decision.
-Live thing: the studio's real budget, constraints and repair-preference controls.
-Layout words by section: hero=poster / workspace=paired interface captures / method=wide band / proof=table and graph crop / questions=bands / close=large link.
-Scores: design 7.5 · usability 8 · creativity 7 · content 8 → overall 7.6.
-Caps applied: creativity capped at 7 because the concert-poster treatment also suits other festival tools; the working Qloo graph and repair behavior carry the actual product difference.
-Top three remaining soft spots (not blocking use):
-1. The portrait hero prioritizes readable names over a large full-grid image; the full board is in the next section.
-2. Typography has extra component sizes beyond the ideal five-step public-page scale.
-3. Screenshots are less readable than the live studio on a phone, so the primary action remains prominent and opens the working interface.
+The first redesign (dark, many hairlines, every cue drawn as a curve, 11px labels, lock icons) read as messy. The current studio applies the board rules: filled tiles on 8px gaps, no rules or outlines, one radius, type no smaller than 13px, five size steps, lime only for actions, moved sets and the open chapter, orange only for clashes. Threads are drawn only for clashes and the current selection; "All cues" shows the full graph and is switched on automatically in the evidence chapter, where the threads draw in.
 
-The final inspector reports zero FAILs and one defended no-footage warning. All images are this application's actual interface; there are no found pictures, invented client photographs or stand-in drawings. Sample content: Crosswinds is fictional, and its contract rules are illustrative. The historical day names its source and separates hypothetical production rules. No awards, customers or outcome metrics are invented.
+Motion carries state, never decoration: sets slide between the draft, each option and its without-Qloo counterfactual (same elements, 720ms), outlines mark where moved sets were, holds drop into their lane, the evidence threads draw in once, the random-fill histogram grows, and approval stamps the grid. Reduced motion keeps every state and drops the travel. A real bug found in a recording (the hold block flew in diagonally because its animation overrode its position) was fixed by positioning holds with left/top.
+
+## Public page
+
+Sections follow the dealt blueprints: sheet with a text cell (hero), rows as a board (real Lollapalooza pairs; open any row: the page's live thing), one card in four fields (one set through read, change, repair, approve), large marks on tiles (measured numbers, including the unflattering 70%), an accordion of filled tiles, and the action tile. Every image is a capture of Counterset; the moving picture is a real screen recording of the studio toggling the draft, Option A and the same repair without Qloo.
+
+## Gate results
+
+`lint.mjs`: 0 FAIL, 0 WARN. `inspect.mjs` at 1440, 768 and 390px: 0 FAIL, 1 WARN. The remaining warning (`card-rows`) points at the hero's sheet of frames and the four copies of one card in "One set, four moments"; both are what the dealt blueprints call for.
+
+Look rounds (screenshots in `.taste-skill/inspect/`, not committed):
+
+1. Hero was a collage of tall chapter crops with small grids and an empty band; board slot text wrapped; the proof board left an orphan tile. Fixed by wide columns for grid captures, a smaller slot size, and a full two-row proof board.
+2. Claim at 30px was read as a six-line headline; the panel button wrapped; phone proof tiles overflowed. Fixed: wordmark is the single headline, claim at the supporting size, tiles use `minmax(0, 1fr)`.
+3. The first screen ended 120px short. Fixed by cropping wide frames to 4:3, which also makes the grids legible.
+
+Self-assessed after round 3 (not an independent jury): design 7.5, usability 8, creativity 7.5, content 8. Remaining soft spots: narrow hero columns end above the fold line; set names in 30-minute sets are clipped on desktop (full names are in each set's title and the inspector); the multi-arts rehearsal grid is illustrative.

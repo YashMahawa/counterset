@@ -1,41 +1,99 @@
 # Validation, 25 October 2026
 
-## Backend
+Three separate questions, answered separately:
 
-Sixteen tests pass. They cover exhaustive small-instance optimality for both repair preferences, locks, attendee priority, zero move budgets, infeasibility, stage exclusivity, malformed coverage, rank ties, unknown/intentional policies, independent recounts, stale publication, same-origin mutation checks, pending quoted constraints, explicit free-key configuration and bounded same-model retries.
+1. **Does the software do what it says?** Tests, real browser runs, live provider checks. This page.
+2. **Is Qloo good evidence for the decision?** Coverage, agreement with open data, sensitivity. See [evaluation](EVALUATION.md).
+3. **Does it help programmers or fans?** Not yet measured. See [evaluation](EVALUATION.md).
 
-The test runner emits one non-failing upstream Starlette/httpx deprecation warning. This is a local single-process application; no load or multi-tenant deployment claim is made.
+## Backend: 28 tests pass
 
-## Live providers
+`pytest -q` covers:
 
-- One fresh exact-catalogue Qloo client preflight returned eleven scored peers for the twelve-act rehearsal universe.
-- A real published fourteen-act day was then checked with a bounded additional twenty-eight Qloo requests. Thirteen artist identities resolved; Black Duck remained unscored. All thirteen resolved rows passed the exact resolved-universe coverage gate. Twelve reciprocal cues were derived. This is thirteen of fourteen acts, so the full day is labelled PARTIAL.
-- Total new successful Qloo calls for this build: **29**. The configured cumulative total is **242 / 5000**, including approximately 213 earlier successes.
-- Gemma 4 31B with high thinking extracted the explicit 17:00 constraint as minute 1020, with the source quote, and left it pending approval.
-- Gemini 3.5 Flash Lite with high thinking returned a valid twelve-act schedule under the same move budget. Its output left two Qloo cue overlaps; the constrained Qloo repair left zero. Both passed the hard-rule validator. These cue counts evaluate the declared graph objective, not independent fan benefit.
-- Gemma's full schedule-comparison attempts encountered provider failures/timeout. No schedule result is fabricated for that arm. Bounded retries and visible failures are implemented. No model or paid-key substitution occurred.
+- **Evidence:** the coverage gate (missing, duplicate, self, non-finite, extra), rank ties widening a cutoff, incomplete rows becoming unknown, a failed order check disabling cues, cross-kind ranks staying inside their own response, the quarter-of-the-kind cap.
+- **Solver:** exhaustive comparison on small instances for both preferences, attendee priority, locks, zero move budget, the intentional-pair exclusion, the cautious unknown policy, buffer and hold recounts. An infeasible window is reduced to exactly the one conflicting rule.
+- **Repair:** a deterministic counterfactual in which the blind repair leaves a named pair clashing and the evidence-aware repair keeps it apart, plus identical options collapsing.
+- **Audit:** the random-fill share is deterministic and bounded.
+- **API:**
+  - repair options and publication;
+  - stale proposals refused after publication or after an identity change;
+  - stale evidence (older than 14 days) blocks publishing;
+  - same-origin and version checks;
+  - cache-only evidence with no rows fails visibly and changes nothing;
+  - message items stay pending until reviewed, with bad items rejected by the controller (an unknown act, and an injected "publish" instruction ignored);
+  - re-review is refused;
+  - a provider 503 applies nothing;
+  - briefing numbers not in the computed facts are rejected;
+  - an infeasible day returns a reduced set of conflicting rules and nothing publishable;
+  - private examples load only by safe id.
+- **Providers:** no paid-key fallback, retry on 500 without switching model, offline cache mode never calls the network, malformed or ambiguous constraint times rejected, after-midnight times roll forward.
 
-Six model attempts were recorded during validation, including provider failures. Provider response details and generated schedules stay in the ignored private validation file. Both configured models use the existing free-project credential file from Recast.
+One upstream Starlette/httpx deprecation warning is emitted and does not affect results.
 
-## Real timetable and disruption
+## Browser: real clicks, desktop and phone
 
-The source is the organizer's [published 2024 Pitchfork schedule](https://pitchfork.com/news/pitchfork-music-festival-2024-schedule-all-the-set-times-you-need-to-know/), Friday 19 July, America/Chicago. Published artist/start/end/stage facts are kept distinct from hypothetical availability, changeovers, stage curfews and locks. Present-day associations make this a retrospective analysis, never a historical forecast.
+`scripts/browser_test.cjs` opens a fresh copy of the Lollapalooza example and clicks through all six chapters:
 
-The original timetable already has zero overlaps among the derived cues. The optimum leaves it unchanged. A hypothetical Blue-stage hold from 18:15–19:00, with already-started sets pinned, makes the old grid invalid. Under the declared hypothetical constraints:
+1. review the bill;
+2. load evidence and open a pair;
+3. audit;
+4. add a stage hold through the dialog, or with `COUNTERSET_MODEL=1` read the message with Gemma and apply the ticked items;
+5. find repairs and switch to "A without Qloo";
+6. approve option A as v1.
 
-| Programmer preference | Changed acts | Total absolute start shift | Cue overlaps | Independent validator |
-| --- | ---: | ---: | ---: | --- |
-| Fewest acts | 1 | 135 minutes | 0 | Pass |
-| Closest start times | 2 | 45 minutes | 0 | Pass |
+| Width | Motion | Result |
+| --- | --- | --- |
+| 1440 | normal | passed, no page errors, no horizontal overflow, bundled font loaded |
+| 390 | normal | passed, no page errors, no horizontal overflow |
+| 1440 | reduced motion | passed |
+| 1440 | normal, real Gemma | passed: Gemma read the message |
 
-Both are proven optimal for their respective declared objective hierarchies and move budget. They are reviewable alternatives, not a claim that either would be accepted by the real festival. The example is available from **Historical day** on the original workstation; raw provider data remains outside the repository.
+Gemma proposed three items from the message:
 
-## Browser and design
+- Bacardi on hold 17:15–18:15;
+- Ethel Cain starts no earlier than 18:00;
+- "Please don't touch anything that has already started", returned as unsupported for a person.
 
-Chrome exercised real clicks through rehearsal creation, recorded evidence, repair, graph inspection, approval and immutable publication. The studio has no horizontal overflow at 390px, both local fonts load, and no JavaScript page errors occurred in that flow. Historical disruption/alternative-preference clicks are also exercised by the browser script; final results are in `.private/browser-results.json`.
+All three carried exact quotes.
 
-The taste inspector measured the public page at 1440, 768 and 390px with **zero FAIL findings**. Headlines fit two lines. Four images are genuine application screenshots. Reduced-motion behavior is defined. The remaining no-footage warning is deliberate: the moving visual is the actual timetable capture; unrelated concert footage would imply a setting/customer relationship the product does not have. The source lint's clock zero-padding warning is valid time formatting. Screenshot review and final design score are in DESIGN_REVIEW.md.
+Desk mode was also exercised on the multi-arts rehearsal: evidence, repair, and both without-Qloo views. The taste-skill inspector found no horizontal overflow on the public page at 1440, 768 or 390.
 
-## Remaining product evidence
+## Live providers (this build)
 
-Qloo's incremental usefulness over strong genre/public-similarity inputs and actual programmer acceptance still need evaluation. The real-day check establishes coverage and working mechanics; it does not establish attendance benefit. No customers, testimonials, paid integrations or deployed-festival outcomes are claimed.
+**Qloo:** 165 new successful calls (cumulative 407 of 5,000, including about 242 before this build). No failed Qloo request. Calls were spaced at least 13 seconds apart and every response was cached privately.
+
+| Purpose | Calls |
+| --- | ---: |
+| Cross-kind probe: 4 comedian searches, 1 podcast search, artist→person, person→artist, person→person, artist→podcast | 9 |
+| Lollapalooza identity searches | 42 |
+| Lollapalooza exact-bill rows and order control | 33 |
+| Multi-arts rehearsal searches, rows and control | about 76 |
+| Extra reversed-order controls | 5 |
+
+**What the probe and rows showed:**
+
+- Comedian↔musician and artist→podcast rows return complete, finite scores.
+- Every Lollapalooza row passed the gate.
+- All six reversed-order controls (one in the snapshot plus five extra) returned identical scores (maximum difference 0.0).
+- The multi-arts rehearsal is complete (20 of 20 rows).
+
+**Models:** 12 attempts in total, 6 of them in this build, all with high thinking on the free project key:
+
+- **Gemma 4 31B** read the message successfully after two HTTP 500 retries, all logged.
+- **Gemini 3.5 Flash Lite** produced:
+  - a briefing that passed the number check;
+  - one LLM-only schedule that stopped with an incomplete response at the old 12,288-token limit (reported as a failure);
+  - after the limit was raised, a complete LLM-only schedule that passed every hard rule.
+
+No paid key, no other model and no fabricated result was used.
+
+## Bugs found and fixed during validation
+
+- Curfew was required to fit the closing set's changeover, which flagged every headliner as invalid. Now curfew binds the set's end only.
+- A set starting exactly when a hold began was treated as already started and locked. Now only sets that began before the hold are locked.
+- Infeasibility cores were OR-Tools' unreduced assumption sets (75 rules). They are now reduced by deletion to the rules that conflict.
+- The hold block animated diagonally because its animation overrode its position transform. Holds are now positioned with left/top.
+- The strict CSP blocked inline style attributes. Geometry is now applied through the CSSOM, and the CSP was kept.
+- The LLM-only comparison failed at the token limit. The limit was raised, and incomplete responses now report their finish reason.
+
+No customer, festival deployment, attendance effect or paid integration is claimed.

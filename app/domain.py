@@ -15,6 +15,18 @@ def digest(value):
     ).hexdigest()
 
 
+# A programme can mix musicians, comedians, speakers and live podcasts. Each kind
+# maps to one Qloo entity type; ranks are only ever compared inside one response.
+QLOO_TYPES = {
+    "artist": "urn:entity:artist",
+    "comedian": "urn:entity:person",
+    "speaker": "urn:entity:person",
+    "podcast": "urn:entity:podcast",
+}
+Kind = Literal["artist", "comedian", "speaker", "podcast"]
+Priority = Literal["fewest_acts", "least_time_shift"]
+
+
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -41,6 +53,7 @@ class Placement(Strict):
 class Act(Strict):
     id: str = Field(min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=120)
+    kind: Kind = "artist"
     qloo_id: str | None = Field(
         default=None,
         pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
@@ -64,6 +77,7 @@ class Outage(Strict):
     stage_id: str
     start: int = Field(ge=0, le=2880)
     end: int = Field(ge=0, le=2880)
+    reason: str = Field(default="Stage hold", max_length=200)
 
 
 class Day(Strict):
@@ -80,7 +94,7 @@ class Day(Strict):
     buffer: int = Field(default=0, ge=0, le=60)
     k: int = Field(default=3, ge=1, le=10)
     unknown_policy: Literal["report", "cautious"] = "report"
-    repair_priority: Literal["fewest_acts", "least_time_shift"] = "fewest_acts"
+    repair_priority: Priority = "fewest_acts"
 
     @model_validator(mode="after")
     def references(self):
@@ -93,10 +107,10 @@ class Day(Strict):
         if len({a.qloo_id for a in self.acts if a.qloo_id}) != sum(
             bool(a.qloo_id) for a in self.acts
         ):
-            raise ValueError("Duplicate resolved Qloo artist")
+            raise ValueError("Duplicate resolved Qloo entity")
         for a in self.acts:
             if not set(a.allowed_stages) <= stages or a.earliest >= a.latest:
-                raise ValueError("Invalid act stages/window")
+                raise ValueError(f"{a.name}: invalid stages or availability window")
         for p in self.draft:
             if p.stage_id not in stages:
                 raise ValueError("Unknown draft stage")
@@ -105,16 +119,8 @@ class Day(Strict):
                 raise ValueError("Invalid conflict pair")
         for o in self.outages:
             if o.stage_id not in stages or o.end <= o.start:
-                raise ValueError("Invalid stage outage")
+                raise ValueError("Invalid stage hold")
         return self
-
-
-class Edge(Strict):
-    a: str
-    b: str
-    source: Literal["qloo", "must_see", "unknown", "genre", "listenbrainz"]
-    weight: int = 1
-    ranks: list[int] = []
 
 
 def canonical_pair(a, b):
@@ -122,4 +128,4 @@ def canonical_pair(a, b):
 
 
 def reference_hash(day, evidence):
-    return digest({"day": day.model_dump(), "evidence": evidence})
+    return digest({"day": day.model_dump(), "evidence": evidence.get("id")})

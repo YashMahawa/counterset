@@ -5,6 +5,7 @@ import json
 import time
 import httpx
 from .domain import digest
+from .evidence import NotCached
 
 
 class ProviderError(Exception):
@@ -114,17 +115,27 @@ class Gateway:
                         + "\n"
                     )
 
-    def qloo(self, path, params, refresh=False):
+    def cache_file(self, path, params):
         cache = self.cfg.private / "cache"
         cache.mkdir(exist_ok=True)
-        file = cache / (digest({"path": path, "params": params}) + ".json")
+        return cache / (digest({"path": path, "params": params}) + ".json")
+
+    def qloo(self, path, params, refresh=False, offline=False):
+        """Returns (payload, provenance). Offline never touches the network."""
+        file = self.cache_file(path, params)
         if file.exists() and not refresh:
             return json.loads(file.read_text()), "private_cache"
+        if offline:
+            raise NotCached(path)
         data = self.request("qloo", path, params=params)
         file.write_text(json.dumps(data))
         return data, "live"
 
-    def model(self, prompt, model=None):
+    def cached_at(self, path, params):
+        file = self.cache_file(path, params)
+        return file.stat().st_mtime if file.exists() else None
+
+    def model(self, prompt, model=None, max_tokens=8192):
         model = model or self.cfg.model
         body = {
             "systemInstruction": {
@@ -137,7 +148,7 @@ class Gateway:
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0,
-                "maxOutputTokens": 12288,
+                "maxOutputTokens": max_tokens,
                 "thinkingConfig": {"thinkingLevel": "high"},
                 "responseMimeType": "application/json",
             },
@@ -171,7 +182,8 @@ class Gateway:
             raise ProviderError("Model unavailable after bounded retries")
         candidates = data.get("candidates", [])
         if not candidates or candidates[0].get("finishReason") not in {"STOP", None}:
-            raise ProviderError("Model did not complete its response")
+            reason = candidates[0].get("finishReason") if candidates else "no candidates"
+            raise ProviderError(f"Model did not complete its response ({reason}); nothing was applied")
         text = "".join(
             p.get("text", "")
             for p in candidates[0].get("content", {}).get("parts", [])

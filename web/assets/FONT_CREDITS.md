@@ -1,7 +1,5 @@
-Big Shoulders and Public Sans are distributed under the SIL Open Font License. Fonts were downloaded from Google Fonts; their individual licenses are included beside the font files.
+Public Sans is distributed under the SIL Open Font License (text-OFL.txt), downloaded from Google Fonts:
+https://github.com/google/fonts/tree/main/ofl/publicsans
 
-Sources:
-- https://github.com/google/fonts/tree/main/ofl/bigshoulders
-- https://github.com/google/fonts/tree/main/ofl/publicsans
-
-Application screenshots are generated from Counterset itself. No external photographs or artist artwork are used.
+Every image and the screen recording in this folder are captures of Counterset itself
+(scripts/capture_assets.cjs, scripts/record_motion.cjs). No external photographs or artist artwork are used.

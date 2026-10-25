@@ -26,6 +26,7 @@ def audit(day: Day, placements: list[Placement], edges: list[dict], budget=None)
     if len(ps) != len(placements):
         errors.append("Duplicate act placement")
     moved = []
+    invalid = set()
     displacement = 0
     for p in placements:
         a = acts.get(p.act_id)
@@ -36,18 +37,23 @@ def audit(day: Day, placements: list[Placement], edges: list[dict], budget=None)
         end = p.start + a.duration
         if p.stage_id not in a.allowed_stages:
             errors.append(f"{a.name}: stage incompatible")
+            invalid.add(a.id)
         if p.start % day.grid:
             errors.append(f"{a.name}: off time grid")
+            invalid.add(a.id)
         if p.start < a.earliest or end > a.latest:
             errors.append(f"{a.name}: outside availability")
-        if p.start < s.opens or end + a.changeover > s.closes:
-            errors.append(f"{a.name}: stage hours/changeover violated")
+            invalid.add(a.id)
+        if p.start < s.opens or end > s.closes:
+            errors.append(f"{a.name}: outside stage hours")
+            invalid.add(a.id)
         changed = p != draft[a.id]
         if changed:
             moved.append(a.id)
             displacement += abs(p.start - draft[a.id].start)
         if a.locked and changed:
             errors.append(f"{a.name}: locked placement changed")
+            invalid.add(a.id)
         for o in day.outages:
             if (
                 o.stage_id == p.stage_id
@@ -55,6 +61,7 @@ def audit(day: Day, placements: list[Placement], edges: list[dict], budget=None)
                 and end + a.changeover > o.start
             ):
                 errors.append(f"{a.name}: stage on hold")
+                invalid.add(a.id)
     for pa, pb in combinations(placements, 2):
         if pa.act_id not in acts or pb.act_id not in acts:
             continue
@@ -65,6 +72,7 @@ def audit(day: Day, placements: list[Placement], edges: list[dict], budget=None)
                 and pb.start < pa.start + aa.duration + aa.changeover
             ):
                 errors.append(f"{aa.name} / {ab.name}: stage overlap or changeover")
+                invalid.update({aa.id, ab.id})
     if budget is not None and len(moved) > budget:
         errors.append("Move budget exceeded")
     ignored = {canonical_pair(p.a, p.b) for p in day.intentional}
@@ -89,6 +97,7 @@ def audit(day: Day, placements: list[Placement], edges: list[dict], budget=None)
     return {
         "passed": not errors,
         "errors": errors,
+        "invalid": sorted(invalid),
         "counts": totals,
         "conflicts": conflicts,
         "moved": moved,
