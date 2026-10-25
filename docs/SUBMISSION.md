@@ -21,7 +21,7 @@ Counterset is a clash desk for a booked festival day. The bill is fixed; only ti
 5. **Choose a repair.** A constraint solver keeps every production rule and offers two options, fewest changed acts or closest start times. Each is solved a second time with all Qloo evidence removed, so you see exactly which pairs the evidence kept apart, or that it changed nothing. When nothing fits, Counterset lists the rules that conflict.
 6. **Approve.** An independent validator recounts everything, and the schedule becomes a numbered, exportable version.
 
-The walkthrough runs on the real workspace; Desk mode gives returning users the same tools without narration.
+Each step is its own calm screen over the real workspace; Desk mode hides the guidance for returning users.
 
 ### How we built it
 
@@ -44,11 +44,11 @@ A festival programmer reviewing proposed moves without being told which signal p
 
 ## Demo script (about 3 minutes)
 
-1. **Public page (10 s).** "Counterset finds the acts on your bill that share a crowd." Open the clash desk.
-2. **The bill (15 s).** Lollapalooza 2024 Saturday, 42 published sets on 7 stages. 32 identities confirmed, 10 left unresolved rather than guessed. Point to a faded set: "unknown, never zero".
-3. **Shared crowds (30 s).** Threads draw in. Select TV Girl × Eyedress: #1 of 31 both ways, from two separate responses, and ListenBrainz agrees. Mention the coverage: 496 pairs ranked, versus 11 linked by public co-listening data.
+1. **Public page (15 s).** Switch the hero timetable between Published, Option A and Without Qloo; the readout shows TV Girl × Eyedress and Romy × Ethel Cain apart or clashing. Open the clash desk.
+2. **The bill (15 s).** Lollapalooza 2024 Saturday, 42 published sets on 7 stages. 32 identities confirmed, 10 left unresolved rather than guessed. Point to a dashed set: "unknown, never zero".
+3. **Shared crowds (30 s).** Red threads join the clashing pairs. Select TV Girl × Eyedress: #1 of 31 both ways, from two separate responses, and ListenBrainz agrees. Mention the coverage: 496 pairs ranked, versus 11 linked by public co-listening data.
 4. **Audit (20 s).** Three clashes in the published grid. Show the histogram: 70% of random fills do as well. "So the grid is not obviously careful, and there is room to repair."
-5. **Something changes (35 s).** Read the hypothetical message with Gemma. Show three items: the Bacardi hold, Ethel Cain not before 18:00, and "don't touch what has started" handed back as needing a person. Tick two and apply. Eyedress turns striped where it breaks the hold.
+5. **Something changes (35 s).** Read the hypothetical message with Gemma. Show three items: the Bacardi hold, Ethel Cain not before 18:00, and "don't touch what has started" handed back as needing a person. Tick two and apply. Eyedress turns hatched where it breaks the hold.
 6. **Choose a repair (40 s).** Find repairs. Sets slide; outlines show where they were. Option A: 3 changed acts, 165 minutes. Option B: 4 acts, 140 minutes. Click "A without Qloo": Romy and Ethel Cain clash again. "That pair is the evidence's contribution here." Optionally ask for the briefing.
 7. **Approve (20 s).** Approve A as v1. The validator re-runs and the CSV shows old and new slots.
 8. **Cross-domain (15 s).** Open the multi-arts rehearsal: comedians and podcasts in the same graph as musicians. Note that it is illustrative.

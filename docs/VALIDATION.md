@@ -32,7 +32,7 @@ One upstream Starlette/httpx deprecation warning is emitted and does not affect 
 
 ## Browser: real clicks, desktop and phone
 
-`scripts/browser_test.cjs` opens a fresh copy of the Lollapalooza example and clicks through all six chapters:
+`scripts/browser_test.cjs` opens a fresh copy of the Lollapalooza example and clicks through all six steps:
 
 1. review the bill;
 2. load evidence and open a pair;
@@ -56,7 +56,7 @@ Gemma proposed three items from the message:
 
 All three carried exact quotes.
 
-Desk mode was also exercised on the multi-arts rehearsal: evidence, repair, and both without-Qloo views. The taste-skill inspector found no horizontal overflow on the public page at 1440, 768 or 390.
+After the redesign the walkthrough passed again at 1440, 390 and with reduced motion. The taste-skill inspector reports 0 failures for the studio (app rules) and the public page at 1440, 768 and 390; see [design review](DESIGN_REVIEW.md).
 
 ## Live providers (this build)
 

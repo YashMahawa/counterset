@@ -6,34 +6,48 @@ const H = { "Content-Type": "application/json", "X-Counterset": "workspace" };
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || "/home/yash/.local/bin/google-chrome", headless: true, args: ["--no-sandbox"] });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 2 });
   const api = (path, body, method) => page.evaluate(async ([path, body, method, H]) => (await fetch("/api" + path, { method: method || (body ? "POST" : "GET"), headers: H, body: body ? JSON.stringify(body) : undefined })).json(), [path, body, method, H]);
-  const wait = async (j) => { for (;;) { const s = await api("/jobs/" + j.job_id); if (s.status !== "RUNNING") return s; await page.waitForTimeout(300); } };
+  const wait = async (j) => {
+    for (;;) {
+      const s = await api("/jobs/" + j.job_id);
+      if (s.status !== "RUNNING") return s;
+      await page.waitForTimeout(300);
+    }
+  };
   await page.goto(base + "/studio");
   await page.waitForSelector(".set");
-  const open = async (id, chapter, setup) => {
+  const open = async (id, step, setup) => {
     const p = await api(`/examples/${id}`, {});
     if (setup) await setup(p.id);
-    await page.evaluate(([id, ch]) => { localStorage.setItem("counterset-project", id); localStorage.setItem("counterset-chapter-" + id, ch); }, [p.id, chapter]);
+    await page.evaluate(([id, s]) => {
+      localStorage.setItem("counterset-project", id);
+      localStorage.setItem("counterset-step-" + id, s);
+      localStorage.setItem("counterset-mode", "desk");
+    }, [p.id, step]);
     await page.goto(base + "/studio");
     await page.waitForSelector(".set");
     await page.waitForTimeout(1400);
     return p.id;
   };
-  const shot = async (sel, name) => { await page.locator(sel).first().screenshot({ path: `web/assets/${name}.png` }); };
-  // 1. The real Lollapalooza grid with its clashes.
+  const shot = (sel, name) => page.locator(sel).first().screenshot({ path: `web/assets/${name}.png` });
+  const step = async (i) => {
+    await page.click(`[data-action=step][data-index='${i}']`);
+    await page.waitForTimeout(900);
+  };
+  // 1. The published Lollapalooza grid, its clashes and the hero pair's evidence.
   await open("lollapalooza-2024-saturday", "2");
-  await shot("#grid-wrap", "grid-clashes");
-  await shot(".chapter.active", "audit-row");
-  await page.evaluate(() => document.querySelector("[data-action=chapter][data-index='0']").click());
+  await shot("#inspector", "audit-chance");
+  await step(0);
+  await shot("#panel", "bill-unresolved");
+  await step(1);
+  await page.locator("#panel tr.pick", { hasText: "TV Girl × Eyedress" }).click();
   await page.waitForTimeout(900);
-  await shot(".chapter.active", "bill-row");
-  await page.evaluate(() => document.querySelector("[data-action=chapter][data-index='2']").click());
-  await page.waitForTimeout(900);
-  // 2. Evidence for the hero pair.
-  await page.locator(".chapter.active .list button.hot").nth(1).click();
-  await page.waitForTimeout(900);
+  await page.evaluate(() => {
+    document.querySelector("#inspector > button.link")?.remove();
+    Object.assign(document.querySelector("#inspector").style, { borderLeft: "0", paddingLeft: "0" });
+  });
   await shot("#inspector", "pair-evidence");
-  // 3. Disruption, repair, counterfactual.
-  const pid = await open("lollapalooza-2024-saturday", "4", async (id) => {
+  // 2. Disruption, repair, counterfactual.
+  await open("lollapalooza-2024-saturday", "4", async (id) => {
     let d = await api(`/projects/${id}`);
     await api(`/projects/${id}/hold`, { version: d.version, stage_id: "stage-bacardi", start: 1035, end: 1095, reason: "Lightning protocol" });
     d = await api(`/projects/${id}`);
@@ -44,19 +58,13 @@ const H = { "Content-Type": "application/json", "X-Counterset": "workspace" };
   });
   await page.locator("#views button", { hasText: "Option A" }).click();
   await page.waitForTimeout(1200);
-  await shot("#grid-wrap", "grid-repaired");
-  await shot(".chapter.active", "options-row");
-  await page.locator("#views button.blind").first().click();
-  await page.waitForTimeout(1400);
-  await shot("#grid-wrap", "grid-without-qloo");
-  // 4. Multi-arts bill with cross-kind cues.
-  await open("crosswinds-multi-arts", "1");
-  await page.waitForTimeout(1800);
-  await shot("#grid-wrap", "grid-multi-arts");
-  // 5. Phone view.
+  await shot(".timetable", "grid-repaired");
+  await shot("#panel", "repair-options");
+  await shot("#inspector", "repair-qloo");
+  // 3. Phone view.
   await page.setViewportSize({ width: 390, height: 844 });
   await open("lollapalooza-2024-saturday", "2");
   await page.screenshot({ path: "web/assets/phone-audit.png" });
-  console.log("captured", pid);
+  console.log("captured");
   await browser.close();
 })();

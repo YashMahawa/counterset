@@ -67,4 +67,4 @@ Docs: [architecture](docs/ARCHITECTURE.md) Â· [validation](docs/VALIDATION.md) Â
 
 Localhost by default. Before exposing the server, set a long `COUNTERSET_ACCESS_TOKEN` and put TLS in front. It is one protected workspace in one process, not a multi-tenant service. The Qloo success counter includes `QLOO_PRIOR_SUCCESS` for earlier use of the same key and stops at `QLOO_SUCCESS_LIMIT` (5,000 maximum).
 
-License: MIT for the application source. Public Sans keeps its own SIL Open Font License. No claim is made to artist names, festival data or Qloo data. Not affiliated with Lollapalooza, Pitchfork or any performer.
+License: MIT for the application source. IBM Plex Sans keeps its own SIL Open Font License. No claim is made to artist names, festival data or Qloo data. Not affiliated with Lollapalooza, Pitchfork or any performer.

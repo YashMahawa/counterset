@@ -23,7 +23,7 @@ fs.mkdirSync(out, { recursive: true });
     await page.waitForTimeout(900);
     await page.screenshot({ path: `${out}/${width}-${name}.png`, fullPage: process.env.FULL === "1" });
   };
-  const next = () => page.locator(".chapter.active [data-action=next] >> visible=true").first().click();
+  const next = () => page.locator("#step-actions [data-action=next] >> visible=true").first().click();
   const statusIs = (re) => page.waitForFunction((src) => new RegExp(src, "i").test(document.querySelector("#status").textContent), re.source, { timeout: 90000 });
 
   await page.goto(base + "/studio");
@@ -38,18 +38,22 @@ fs.mkdirSync(out, { recursive: true });
   const result = {};
   await shot("1-bill");
   await next();
+  if (!(await page.locator("#panel .kpis").count())) {
+    await page.click("[data-action=evidence][data-source=cache]");
+    await statusIs(/Evidence/);
+  }
   await shot("2-crowds");
-  await page.locator(".chapter.active .list button").first().click();
+  await page.locator("#panel tr.pick").first().click();
   await shot("2-pair");
   await next();
-  result.audit = await page.locator(".chapter.active .chapter-state").textContent();
+  result.audit = await page.locator("#step-finding").textContent();
   await shot("3-audit");
   await next();
   if (process.env.COUNTERSET_MODEL === "1") {
     await page.click("[data-action=message]");
     await page.waitForSelector("[data-review-index]", { timeout: 200000 });
     await shot("4-message");
-    await page.click(".chapter.active [data-action=review]");
+    await page.click("[data-action=review]");
     await statusIs(/Applied|Declined/);
   } else {
     await page.click("[data-action=hold]");
@@ -76,7 +80,7 @@ fs.mkdirSync(out, { recursive: true });
   await page.locator("#views button", { hasText: "Option A" }).click();
   await next();
   await shot("6-approve");
-  await page.locator(".chapter.active [data-action=publish]").click();
+  await page.locator("#step-actions [data-action=publish]").click();
   await statusIs(/Published v1/);
   result.published = true;
   await shot("6-published");

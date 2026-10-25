@@ -5,120 +5,187 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta
       name="description"
-      content="Counterset finds the acts on a festival bill that share a crowd, using Qloo, and repairs the timetable around real production rules so they stop clashing."
+      content="Counterset uses Qloo to find which acts on a festival bill share a crowd, and moves sets so those acts stop playing at the same time, under every production rule."
     />
-    <title>Counterset — the clash desk</title>
+    <title>Counterset — the festival clash desk</title>
     <link rel="icon" href="/web/assets/icon.svg" type="image/svg+xml" />
+    <link rel="preload" href="/web/assets/plex-sans.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/web/landing.css" />
-    <script src="/web/landing.js" defer></script>
+    <script src="/web/landing.js"></script>
   </head>
   <body>
     <main>
-      <section class="sheet" aria-label="Counterset">
-        <div class="col c1 wide">
-          <figure class="frame"><img class="shutter" src="/web/assets/grid-clashes.png" width="2016" height="1018" alt="Counterset's timetable of the published Lollapalooza 2024 Saturday, with three clashing pairs filled orange" /><figcaption class="s1">Lollapalooza 2024 · Saturday</figcaption></figure>
-          <figure class="frame"><img src="/web/assets/pair-evidence.png" width="2016" height="566" alt="Evidence for TV Girl and Eyedress: each is number one of 31 in the other's Qloo row" loading="lazy" /><figcaption class="s3">TV Girl × Eyedress</figcaption></figure>
-          <figure class="frame"><img src="/web/assets/grid-without-qloo.png" width="2016" height="1018" alt="The same repair without Qloo leaves Romy and Ethel Cain clashing" loading="lazy" /><figcaption class="s4">The same repair, without Qloo</figcaption></figure>
+      <section class="hero" aria-label="Counterset">
+        <div class="hero-text">
+          <a class="logo" href="/" aria-label="Counterset home">
+            <svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true"><rect x="1" y="3" width="8" height="5" rx="1.5" /><rect x="11" y="12" width="8" height="5" rx="1.5" /><path d="M5 8v2.5a2 2 0 0 0 2 2h4" fill="none" stroke-width="1.6" /></svg>
+            <span>Counterset</span>
+          </a>
+          <div class="hero-copy">
+            <h1 class="mask"><span class="line"><span>Counterset, the clash desk</span></span><span class="line"><span>for festival timetables</span></span></h1>
+            <p class="intro">It uses Qloo to find which acts on your bill share a crowd, then moves sets so those acts stop playing at the same time, without breaking a production rule.</p>
+            <div class="hero-actions">
+              <a class="button" href="/studio">Open the clash desk</a>
+              <a class="text-link" href="#how">How a day is repaired</a>
+            </div>
+          </div>
         </div>
-        <div class="col c2">
-          <figure class="frame"><img src="/web/assets/audit-row.png" width="800" height="1770" alt="The audit step: three cue clashes and a chart of random fills of the same slots" loading="lazy" /><figcaption class="s2">Audit against random fills</figcaption></figure>
-          <figure class="frame"><img src="/web/assets/phone-audit.png" width="780" height="1688" alt="The audit step on a phone" loading="lazy" /><figcaption class="s4">On a phone</figcaption></figure>
-        </div>
-        <div class="panel">
-          <h1 class="wordmark">Counterset</h1>
-          <p class="claim">See which acts share a crowd, and keep them apart.</p>
-          <a class="action" href="/studio">Open the clash desk</a>
-          <p class="links"><a href="#board">The evidence</a><a href="#how">How it works</a><a href="#questions">Questions</a></p>
-        </div>
-        <div class="col c3 wide">
-          <figure class="frame"><video src="/web/assets/repair-motion.webm" poster="/web/assets/repair-motion-poster.jpg" width="1100" height="520" autoplay muted loop playsinline aria-label="Screen recording: the timetable switches between the draft, Option A and the same repair without Qloo"></video><figcaption class="s2">Recorded: draft, repair, without Qloo</figcaption></figure>
-          <figure class="frame"><img src="/web/assets/grid-multi-arts.png" width="2016" height="754" alt="A rehearsal bill of musicians, comedians and live podcasts with cues that cross between them" loading="lazy" /><figcaption class="s3">Music, comedy, podcasts</figcaption></figure>
-          <figure class="frame"><img src="/web/assets/grid-repaired.png" width="2016" height="1018" alt="Option A after a lightning hold: three sets move, shown in lime" loading="lazy" /><figcaption class="s1">Option A · 3 sets move</figcaption></figure>
-        </div>
-        <div class="col c4">
-          <figure class="frame"><img src="/web/assets/options-row.png" width="800" height="2020" alt="Two repair options with changed acts, minutes shifted and cue clashes left" loading="lazy" /><figcaption class="s1">Two ways to repair</figcaption></figure>
-          <figure class="frame"><img src="/web/assets/bill-row.png" width="800" height="1524" alt="The bill: 32 of 42 acts confirmed, 10 left unresolved" loading="lazy" /><figcaption class="s2">Ten acts left unresolved</figcaption></figure>
-        </div>
-      </section>
-
-      <section class="board" id="board" data-ui aria-label="Pairs on the Lollapalooza 2024 Saturday bill">
-        <div id="rows" class="rows" role="list"></div>
-        <p class="board-note">Pairs from the published Lollapalooza 2024 Saturday timetable. Each act asked Qloo to rank the other 30 confirmed acts on the bill. Select a row to open it. Not affiliated with the festival.</p>
-      </section>
-
-      <section class="how" id="how">
-        <div class="field f1">
-          <h2>One set, four moments</h2>
-          <div class="card" data-ui><strong>Romy</strong><span>Bacardi 18:30–19:15</span><span class="tag hot">Clashes with Ethel Cain · 15 min</span><span>#1 of 31 in each other's rows</span></div>
-          <p class="clause">First the bill is read. Romy and Ethel Cain overlap.</p>
-        </div>
-        <div class="field f2">
-          <div class="card" data-ui><strong>Romy</strong><span>Bacardi 18:30–19:15</span><span class="tag">“Ethel Cain cannot go on before 18:00”</span><span>Proposed by Gemma, waiting for approval</span></div>
-          <p class="clause">Then something changes. A message is read, not obeyed.</p>
-        </div>
-        <div class="field f3">
-          <div class="card" data-ui><strong>Romy</strong><span>BMI 20:00–20:45</span><span class="tag go">Apart from Ethel Cain</span><span>Without Qloo the repair leaves them clashing</span></div>
-          <p class="clause">Then the repair moves it, under every production rule.</p>
-        </div>
-        <div class="field f4">
-          <div class="card" data-ui><strong>Romy</strong><span>BMI 20:00–20:45</span><span class="tag go">Version 1 published</span><span>Validated again · CSV and JSON export</span></div>
-          <p class="clause">Finally a person approves it, as a numbered version.</p>
+        <div class="hero-stage">
+          <div class="frag" data-ui id="frag" aria-label="Part of the Lollapalooza 2024 Saturday timetable">
+            <div class="frag-head">
+              <strong>Lollapalooza 2024 · Saturday</strong>
+              <span>Four of seven stages, late afternoon to 21:00</span>
+            </div>
+            <div class="seg" role="tablist" aria-label="Which timetable">
+              <button role="tab" aria-selected="true" data-state="published">Published</button
+              ><button role="tab" aria-selected="false" data-state="repair">Option A</button
+              ><button role="tab" aria-selected="false" data-state="blind">Without Qloo</button>
+            </div>
+            <div class="tt" id="tt"></div>
+            <dl class="readout" id="readout" aria-live="polite"></dl>
+            <p class="frag-note" id="frag-note"></p>
+          </div>
         </div>
       </section>
 
-      <section class="proof" aria-label="What was checked">
-        <div class="mark lead"><h2>What was checked</h2><p>Real days, real responses, recounted by a validator that shares no code with the solver.</p></div>
-        <div class="mark"><strong>496 / 861</strong><p>Lollapalooza pairs Qloo ranked in both directions</p></div>
-        <div class="mark paper"><strong>11</strong><p>of those 861 pairs linked at all by ListenBrainz's public similar-artist lists</p></div>
-        <div class="mark"><strong>14</strong><p>cues crossing music, comedy and podcasts on the rehearsal bill</p></div>
-        <div class="mark hot"><strong>70%</strong><p>of random fills of those slots clash as little. The real grid was not unusually careful.</p></div>
-        <div class="mark"><strong>10</strong><p>acts left unresolved rather than guessed. Their pairs stay unknown.</p></div>
-        <div class="mark"><strong>0</strong><p>schedule changes a model can make on its own</p></div>
-      </section>
-
-      <section class="faq" id="questions">
-        <h2>Questions</h2>
-        <div class="tiles">
-          <details name="faq" open>
-            <summary>Why Qloo, not genre tags or public similar-artist data?</summary>
-            <p>Counterset needs every pair on your bill ranked, including small acts and acts that are not musicians. Qloo ranks exactly the acts you send it in one response per kind of act. On the Lollapalooza Saturday bill that covered 496 pairs both ways; ListenBrainz's public top-100 lists linked 11. Genre tags pair acts by label, not by audience, and found a mostly different set. Where ListenBrainz did link a pair, three of its four reciprocal pairs were also Qloo cues.</p>
-          </details>
-          <details name="faq">
-            <summary>Does it change who plays?</summary>
-            <p>No. The bill is fixed. Counterset only moves start times and stages, inside each act's availability, changeovers, stage hours, curfews and locks. Sets that have already started are never moved.</p>
-          </details>
-          <details name="faq">
-            <summary>What does the AI actually do?</summary>
-            <p>A model reads production messages and proposes typed constraints, each with the exact words it came from. You tick which ones to apply. A second model can brief you on the computed options; any number it uses that is not in the computed facts gets the briefing replaced by a plain summary. Models cannot call Qloo, solve, approve or publish.</p>
-          </details>
-          <details name="faq">
-            <summary>What if an act is not in Qloo?</summary>
-            <p>It stays unresolved. Every pair with that act is reported as unknown, never as zero, and you choose whether unknown pairs count. On Lollapalooza Saturday, 10 of 42 acts stayed unresolved rather than being matched by guesswork.</p>
-          </details>
-          <details name="faq">
-            <summary>What happens when nothing fits?</summary>
-            <p>The solver says so and lists the rules that cannot all hold, reduced until removing any one makes the rest satisfiable. It never shortens a set, relaxes a curfew or breaks a lock to make a schedule appear.</p>
-          </details>
-          <details name="faq">
-            <summary>Is it proven to improve a festival?</summary>
-            <p>Not yet. The software is tested and the evidence is inspectable, but no festival has used it and attendance effects are unmeasured. The next test is a programmer reviewing proposed moves, and attendees' own must-see pairs, which already take priority when you enter them.</p>
-          </details>
+      <section class="showcase" aria-labelledby="inside">
+        <div class="shelf" id="shelf">
+          <figure class="panel" data-name="TV Girl × Eyedress" data-lines="Each is the other's first choice among the 31 confirmed acts, from two separate Qloo responses.|ListenBrainz co-listening links them too. The published grid overlaps them for 45 minutes.">
+            <img src="/web/assets/pair-evidence.png" width="868" height="866" alt="Pair detail: in TV Girl's Qloo row Eyedress is number 1 of 31, and the reverse; 45 minutes at the same time" />
+          </figure>
+          <figure class="panel" data-name="Against chance" data-lines="The same acts shuffled into the same slots 4,000 times.|70% of shuffles clash as little, so the published grid was not unusually careful.">
+            <img src="/web/assets/audit-chance.png" width="868" height="528" alt="A histogram of clashes per shuffle with the real grid's count marked in red" loading="lazy" />
+          </figure>
+          <figure class="panel wide" data-name="The repair, recorded" data-lines="One screen recording of the studio: the published draft, option A, then the same repair solved without Qloo.|Sets slide to their new slots; dashed outlines show where they were.">
+            <video src="/web/assets/repair-motion.webm" poster="/web/assets/repair-motion-poster.jpg" width="1100" height="520" muted loop playsinline preload="metadata" aria-label="Screen recording of the timetable switching between the draft, option A and the same repair without Qloo"></video>
+          </figure>
+          <figure class="panel wide" data-name="Two ways to repair" data-lines="Fewest changed acts, or closest start times. Each is proven best within the move limit.|Keep any set where it is and the solver runs again.">
+            <img src="/web/assets/repair-options.png" width="1734" height="794" alt="Two repair options: A changes 3 acts by 165 minutes, B changes 4 acts by 140 minutes, each leaving 1 clash" loading="lazy" />
+          </figure>
+          <figure class="panel" data-name="What Qloo changed" data-lines="Every option is solved a second time with all Qloo evidence removed.|Here, without it, Romy and Ethel Cain would play 30 minutes at once.">
+            <img src="/web/assets/repair-qloo.png" width="868" height="794" alt="Without Qloo, option A would leave Romy and Ethel Cain playing at the same time" loading="lazy" />
+          </figure>
+          <figure class="panel wide" data-name="Unknown, never zero" data-lines="Ten of 42 acts could not be confirmed in Qloo, so they stay unresolved.|Every pair with them is reported as unknown rather than guessed.">
+            <img src="/web/assets/bill-unresolved.png" width="1734" height="814" alt="The bill step listing unresolved acts with a Find in Qloo action on each" loading="lazy" />
+          </figure>
+          <figure class="panel phone" data-name="On a phone" data-lines="The same desk at 390 pixels: steps in one row, the timetable scrolling sideways.|Stage names stay pinned at the left.">
+            <img src="/web/assets/phone-audit.png" width="780" height="1688" alt="The audit step of the studio on a phone" loading="lazy" />
+          </figure>
+        </div>
+        <div class="caption">
+          <h2 id="inside">Inside the desk</h2>
+          <p class="cap-name" id="cap-name">TV Girl × Eyedress</p>
+          <p class="cap-line" id="cap-1"></p>
+          <p class="cap-line" id="cap-2"></p>
+          <div class="shelf-nav">
+            <button id="prev" aria-label="Previous panel">←</button>
+            <button id="next" aria-label="Next panel">→</button>
+          </div>
         </div>
       </section>
 
-      <section class="close">
-        <div class="flank left"><img src="/web/assets/grid-multi-arts.png" width="2016" height="754" alt="" loading="lazy" /></div>
-        <div class="cta">
-          <h2>Bring your own bill</h2>
-          <p>Open a real day or a rehearsal, step through it, then switch to the desk.</p>
-          <a class="action dark" href="/studio">Open the clash desk</a>
+      <section class="how" id="how" aria-labelledby="how-title">
+        <h2 id="how-title">How a day is repaired</h2>
+        <div class="steps-col">
+          <div class="stmt active" data-state="read">
+            <p class="say">First, the bill is read against Qloo.</p>
+            <p>Each act ranks every other act on the bill. Pairs that rank each other near the top and play at once are clashes.</p>
+          </div>
+          <div class="stmt" data-state="message">
+            <p class="say">Then a message from production arrives.</p>
+            <p>Gemma proposes constraints, each quoted word for word. Nothing changes until you tick it.</p>
+          </div>
+          <div class="stmt" data-state="approve">
+            <p class="say">Last, you approve one repair.</p>
+            <p>The solver keeps every rule, and shows what the same repair would look like without Qloo.</p>
+          </div>
         </div>
-        <div class="flank right"></div>
+        <div class="pin">
+          <div class="card" data-ui id="card">
+            <div class="state" data-state="read">
+              <p class="card-title">Clashes in the published grid</p>
+              <table>
+                <thead><tr><th>Pair</th><th class="num">Ranks</th><th class="num">Overlap</th></tr></thead>
+                <tbody>
+                  <tr><td>Infinity Song × Friko</td><td class="num">#3 · #2</td><td class="num"><span class="pill bad">15 min</span></td></tr>
+                  <tr class="on"><td>TV Girl × Eyedress</td><td class="num">#1 · #1</td><td class="num"><span class="pill bad">45 min</span></td></tr>
+                  <tr><td>Romy × Ethel Cain</td><td class="num">#1 · #1</td><td class="num"><span class="pill bad">15 min</span></td></tr>
+                </tbody>
+              </table>
+              <p class="card-foot">Ranks are out of 31 confirmed acts, read inside one Qloo response each.</p>
+            </div>
+            <div class="state" data-state="message">
+              <p class="card-title">Production message</p>
+              <p class="quote">“Bacardi stage is closed 17:15–18:15 while the roof is checked. Ethel Cain cannot go on before 18:00. Please don't touch anything that has already started.”</p>
+              <ul class="items">
+                <li><span class="box on" aria-hidden="true"></span><span>Bacardi on hold 17:15–18:15</span><span class="pill">pending</span></li>
+                <li><span class="box on" aria-hidden="true"></span><span>Ethel Cain starts no earlier than 18:00</span><span class="pill">pending</span></li>
+                <li><span class="box" aria-hidden="true"></span><span>Needs a person: not a schedule constraint</span><span class="pill warn">unsupported</span></li>
+              </ul>
+              <p class="card-foot">The model's real reading of this message. The festival did not send it; it is a rehearsal.</p>
+            </div>
+            <div class="state" data-state="approve">
+              <p class="card-title">Repair options</p>
+              <table>
+                <thead><tr><th>Option</th><th class="num">Acts</th><th class="num">Shift</th><th class="num">Clashes</th></tr></thead>
+                <tbody>
+                  <tr class="on"><td>A · fewest changed acts</td><td class="num">3</td><td class="num">165 min</td><td class="num">1</td></tr>
+                  <tr><td>B · closest start times</td><td class="num">4</td><td class="num">140 min</td><td class="num">1</td></tr>
+                </tbody>
+              </table>
+              <p class="note">Without Qloo, option A would leave Romy × Ethel Cain on at once for 30 minutes.</p>
+              <span class="approve">Approve option A as v1</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="proof" aria-labelledby="checked">
+        <h2 id="checked">What was checked</h2>
+        <div class="names">
+          <p class="kind">Real days</p>
+          <p>Lollapalooza 2024 Saturday, 42 sets</p>
+          <p>Pitchfork 2024 Friday, 14 sets</p>
+          <p>A rehearsal bill of music, comedy and podcasts</p>
+          <p class="kind break">Measured</p>
+          <p>496 of 861 pairs ranked by Qloo both ways</p>
+          <p>11 of them linked by ListenBrainz</p>
+          <p>14 pairs across kinds of act</p>
+          <p>70% of random fills clash as little</p>
+          <p>10 acts left unresolved</p>
+          <p class="kind break">Tested</p>
+          <p>28 backend tests</p>
+          <p>Every step clicked at desktop and phone width</p>
+          <p>Reduced motion</p>
+          <p>One real Gemma reading</p>
+          <p class="kind break">Not claimed</p>
+          <p>Effects on attendance</p>
+          <p>A programmer's verdict</p>
+          <p>Any festival's endorsement</p>
+        </div>
+      </section>
+
+      <section class="faq" id="questions" aria-labelledby="faq-title">
+        <div class="qs" role="tablist" aria-labelledby="faq-title">
+          <h2 id="faq-title">Questions</h2>
+        </div>
+        <div class="answer" id="answer" aria-live="polite"></div>
+      </section>
+
+      <section class="close" aria-labelledby="close-title">
+        <div class="close-text">
+          <h2 id="close-title">Bring your own bill</h2>
+          <p>Open the Lollapalooza Saturday, or import your own day and step through it.</p>
+          <div class="hero-actions"><a class="button" href="/studio">Open the clash desk</a></div>
+        </div>
+        <figure>
+          <img src="/web/assets/grid-repaired.png" width="2748" height="960" alt="The Lollapalooza timetable after option A: three moved sets outlined in teal, their old slots dashed" loading="lazy" />
+          <figcaption>Option A after the rehearsal hold: three sets moved, every rule kept.</figcaption>
+        </figure>
       </section>
     </main>
     <footer class="foot">
-      <p class="foot-name">Counterset</p>
-      <p>Built for the Qloo Agentic Hackathon 2026. Qloo supplies the taste evidence. Lollapalooza timetable from Time Out Chicago, corroborated by Uproxx; independent lenses from MusicBrainz and ListenBrainz. Public Sans under the SIL Open Font License. Every image on this page is Counterset's own interface.</p>
+      <p>Counterset · built for the Qloo Agentic Hackathon 2026 · timetable from Time Out Chicago, checked against Uproxx · open data from MusicBrainz and ListenBrainz · IBM Plex Sans under the SIL Open Font License · every image is Counterset's own interface · not affiliated with any festival</p>
     </footer>
   </body>
 </html>

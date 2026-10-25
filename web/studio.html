@@ -4,49 +4,67 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Counterset — clash desk</title>
+    <link rel="preload" href="/web/assets/plex-sans.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/web/studio.css" />
     <link rel="icon" href="/web/assets/icon.svg" type="image/svg+xml" />
     <script src="/web/studio.js" type="module"></script>
   </head>
   <body data-mode="walk">
     <a class="skip" href="#grid">Skip to the timetable</a>
-    <header class="bar">
-      <a class="mark" href="/">Counterset</a>
-      <div class="bar-day">
+    <header class="top">
+      <a class="mark" href="/" aria-label="Counterset home">
+        <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><rect x="1" y="3" width="8" height="5" rx="1.5" /><rect x="11" y="12" width="8" height="5" rx="1.5" /><path d="M5 8v2.5a2 2 0 0 0 2 2h4" fill="none" stroke-width="1.6" /></svg>
+        <span>Counterset</span>
+      </a>
+      <button id="open-day" class="day-switch" aria-haspopup="dialog">
         <strong id="day-name">Loading…</strong>
         <span id="day-meta"></span>
-      </div>
-      <button id="open-day" class="bar-btn" aria-haspopup="dialog">Open a day</button>
-      <div class="mode" role="group" aria-label="Interface mode">
-        <button id="mode-walk" aria-pressed="true">Walkthrough</button
-        ><button id="mode-desk" aria-pressed="false">Desk</button>
-      </div>
-      <button id="tools" class="bar-btn" aria-haspopup="menu" aria-expanded="false">Tools</button>
-      <div id="tools-menu" class="menu" role="menu" hidden>
-        <button role="menuitem" id="edit-json">Edit facts (JSON)</button>
-        <label role="menuitem" class="menu-file">Import a day<input type="file" id="import" accept="application/json" /></label>
-        <button role="menuitem" id="compare">Compare evidence</button>
-        <button role="menuitem" id="shortcuts">Keyboard shortcuts</button>
-        <button role="menuitem" id="auth">Access token</button>
+      </button>
+      <div class="top-end">
+        <span id="budget-stamp" class="stamp"></span>
+        <div class="mode" role="group" aria-label="Interface mode">
+          <button id="mode-walk" aria-pressed="true">Guided</button
+          ><button id="mode-desk" aria-pressed="false">Desk</button>
+        </div>
+        <button id="tools" class="quiet" aria-haspopup="menu" aria-expanded="false">Tools</button>
+        <div id="tools-menu" class="menu" role="menu" hidden>
+          <button role="menuitem" id="edit-json">Edit facts (JSON)</button>
+          <label role="menuitem" class="menu-file">Import a day<input type="file" id="import" accept="application/json" /></label>
+          <button role="menuitem" id="compare">Compare evidence</button>
+          <button role="menuitem" id="shortcuts">Keyboard shortcuts</button>
+          <button role="menuitem" id="auth">Access token</button>
+          <button role="menuitem" id="mode-toggle" class="phone-only">Switch guided / desk</button>
+        </div>
       </div>
     </header>
 
-    <main class="desk" data-ui>
-      <aside class="sheet" aria-label="Run sheet">
-        <ol id="chapters" class="chapters"></ol>
-      </aside>
+    <main class="sheet">
+      <nav id="steps" class="steps" aria-label="Steps"></nav>
 
-      <section class="stagefloor" aria-label="Timetable">
-        <div class="floor-head">
+      <div class="title-row">
+        <div class="title-text">
+          <h1 id="step-title">Counterset</h1>
+          <p id="step-finding" class="finding"></p>
+          <p id="step-lead" class="lead"></p>
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+        </div>
+        <div id="step-actions" class="actions"></div>
+      </div>
+
+      <section class="card timetable" aria-label="Timetable">
+        <header class="card-head">
           <div id="views" class="views" role="tablist" aria-label="Which timetable to show"></div>
           <div id="legend" class="legend"></div>
-        </div>
-        <div id="context" class="context"></div>
+        </header>
         <div class="grid-wrap" id="grid-wrap">
           <div id="grid" class="grid" tabindex="-1"></div>
         </div>
-        <div id="status" class="status" role="status" aria-live="polite"></div>
-        <section id="inspector" class="inspector" aria-live="polite"></section>
+        <p id="context" class="card-foot"></p>
+      </section>
+
+      <section class="card work">
+        <div id="panel" class="panel"></div>
+        <aside id="inspector" class="inspector" aria-live="polite"></aside>
       </section>
     </main>
 
@@ -59,7 +77,7 @@
       <form method="dialog" id="dialog-form">
         <header class="dialog-head">
           <h2 id="dialog-title"></h2>
-          <button value="cancel" class="ghost" id="dialog-close" aria-label="Close">Close</button>
+          <button value="cancel" class="quiet" id="dialog-close" aria-label="Close">Close</button>
         </header>
         <div id="dialog-body"></div>
       </form>

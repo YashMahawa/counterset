@@ -21,10 +21,10 @@ const H = { "Content-Type": "application/json", "X-Counterset": "workspace" };
   await setup.close();
   const ctx = await browser.newContext({ bypassCSP: true, viewport: { width: 1100, height: 520 }, recordVideo: { dir: "test-results/video", size: { width: 1100, height: 520 } } });
   const page = await ctx.newPage();
-  await page.addInitScript(([id]) => { localStorage.setItem("counterset-project", id); localStorage.setItem("counterset-chapter-" + id, "4"); localStorage.setItem("counterset-mode", "desk"); }, [p.id]);
+  await page.addInitScript(([id]) => { localStorage.setItem("counterset-project", id); localStorage.setItem("counterset-step-" + id, "4"); localStorage.setItem("counterset-mode", "desk"); }, [p.id]);
   await page.goto(base + "/studio");
   await page.waitForSelector(".set");
-  await page.addStyleTag({ content: ".bar,.sheet,.context,.status,.inspector,.floor-head{display:none!important} body{padding:0} .desk{display:block}" });
+  await page.addStyleTag({ content: ".top,.steps,.title-row,.work,.card-head,.card-foot{display:none!important} .sheet{border:0;margin:0;padding:12px 0 0;min-height:0}" });
   await page.waitForTimeout(800);
   const view = (t) => page.evaluate((t) => [...document.querySelectorAll("#views button")].find((b) => b.textContent.trim() === t)?.click(), t);
   for (const t of ["Current draft", "Option A", "A without Qloo", "Option A", "Current draft"]) {
