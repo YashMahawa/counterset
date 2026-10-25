@@ -71,6 +71,13 @@ async function load() {
     project = await api(`/projects/${project.id}`);
   }
   localStorage.setItem("counterset-project", project.id);
+  const saved = project.proposals?.find(
+    (p) => p.input_version === project.version && p.audit?.passed,
+  );
+  if (saved) {
+    proposal = { ...saved, proposal_id: saved.id };
+    proposed = true;
+  }
   if (new URLSearchParams(location.search).has("project")) {
     history.replaceState(null, "", "/studio");
   }
