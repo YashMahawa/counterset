@@ -28,6 +28,8 @@ Top three problems (most visible first), each with the screenshot it shows in an
 
 Final measurement and screenshot review are recorded in VALIDATION.md. No claim of an independent design-jury score is made. The source lint's zero-padding warning is legitimate clock formatting. The landing page has no borrowed footage: its moving picture is the real timetable capture with a small reduced-motion-aware drift. Extra decorative concert footage would not explain this product.
 
+The lint's em-dash count comes from missing-value symbols in the real comparison table and page-title punctuation, not repeated rhetorical prose.
+
 ROUND 3
 Seen in one second: a concert-poster headline carrying a real timetable.
 Idea (one sentence): the booked artists remain, while the working schedule shows the editable decision.

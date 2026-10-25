@@ -70,6 +70,10 @@ async function load() {
     localStorage.setItem("counterset-project", project.id);
     project = await api(`/projects/${project.id}`);
   }
+  localStorage.setItem("counterset-project", project.id);
+  if (new URLSearchParams(location.search).has("project")) {
+    history.replaceState(null, "", "/studio");
+  }
   render();
 }
 async function reload() {
