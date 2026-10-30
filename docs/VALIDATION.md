@@ -67,7 +67,7 @@ The recording and the stored table were then rebuilt on the final solver. Detail
 
 ## Browser
 
-Final run on 30 October against the live site, with `LIVE=1`: see the commit that records it. This run pastes a lineup and uses real Qloo calls and the real model through the real interface. It found a bug that API tests could not: the review dialog closed itself. It also checks that the top bar stays solid over each section, because a colour-changing bar once hid itself over the black one, and it drags a set, undoes the move, reloads, approves and opens the share link. The container is built by Render from the Dockerfile.
+Final run on 30 October against the live site, with `LIVE=1`: 66 of 66 checks pass, across 1440 and 390 pixels wide. The test browser was pinned to one Render edge address, because the other one resets connections from the test machine's network. From outside that network the site loaded on 3 of 3 checks. This run pastes a lineup and uses real Qloo calls and the real model through the real interface. It found a bug that API tests could not: the review dialog closed itself. It also checks that the top bar stays solid over each section, because a colour-changing bar once hid itself over the black one, and it drags a set, undoes the move, reloads, approves and opens the share link. The container is built by Render from the Dockerfile.
 
 `scripts/browser_test.cjs` drives real clicks at 1440 and 390 wide. It needs a running server, Playwright on `NODE_PATH` and Chrome at `CHROME_PATH`, and it uses recorded decisions with no model. It covers:
 

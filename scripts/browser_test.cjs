@@ -14,7 +14,7 @@ const check = (name, ok, more = "") => {
 };
 let active;
 (async () => {
-  const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH, headless: true });
+  const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH, headless: true, args: (process.env.CHROME_ARGS || "").split(" ").filter(Boolean) });
   for (const size of WIDTHS) {
     const tag = size.width;
     console.log(`--- ${tag}px`);
