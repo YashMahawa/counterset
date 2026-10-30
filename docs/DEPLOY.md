@@ -39,7 +39,7 @@ The repository holds no Qloo data, so a build from a clean clone has no worked e
 | `GEMINI_BACKUP_API_KEY` | A paid key, used only when every free key fails. Without it, the page offers a saved run at that point. |
 | `BACKUP_UNTIL` | Unix time after which the paid key stops being used. Without it, the paid key is off. |
 | `BACKUP_CALLS_PER_VISITOR_HOUR`, `BACKUP_CALLS_PER_VISITOR_DAY`, `BACKUP_CALLS_PER_HOUR`, `BACKUP_CALLS_PER_DAY` | Caps on paid calls. Defaults 14, 28, 40 and 120. The totals live on the server's disk, so a restart on a temporary disk clears them. Set a budget alert on the key's Google project too. |
-| `MODEL_THINKING` | `high` (default) or `medium`, for runs that name no level. The page can choose low, medium or high for each live run. Thinking is never off. |
+| `MODEL_THINKING` | `medium` (default) or `high`. Thinking is never off. |
 | `MODEL_CALL_LIMIT` | Total model calls before the server stops asking. Default 500. |
 | `ASKS_PER_VISITOR_HOUR`, `ASKS_PER_DAY` | Caps on questions to the agent. Defaults 12 and 80. |
 | `AGENT_RUNS_PER_VISITOR_HOUR`, `AGENT_RUNS_PER_DAY` | Live agent caps. Defaults: 3 and 40. |

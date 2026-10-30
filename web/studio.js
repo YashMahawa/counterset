@@ -58,7 +58,6 @@ const S = {
   publishing: false,
   // What the person set in the try box. Left alone, a template day plays its saved run.
   limits: { shortest: "", curfew: "", drop: true },
-  thinking: null,
   forceLive: false,
   // Below the timetable: which list shows, and the conversation with the agent.
   lower: "changes",
@@ -538,7 +537,7 @@ const STEPS = [
     panel: () => {
       const note = S.project.notes[0];
       return `<label>Production message<textarea id="message" rows="3">${esc(S.typed.note ?? sampleMessage())}</textarea></label>
-      <div class="row"><select id="message-model" aria-label="Model"><option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite · high thinking</option></select><button class="${note ? "" : "primary"}" data-action="message" ${S.config.model_configured ? "" : "disabled"}>Read the message</button></div>
+      <div class="row"><select id="message-model" aria-label="Model"><option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option></select><button class="${note ? "" : "primary"}" data-action="message" ${S.config.model_configured ? "" : "disabled"}>Read the message</button></div>
       <p class="fine">${S.project.context?.kind === "retrospective" ? "This sample message is hypothetical. The festival did not send it." : "A sample message. Replace it with yours."}</p>
       ${note ? reviewList(note) : ""}`;
     },
@@ -796,57 +795,17 @@ const MODEL_WORDS = { "gemini-3.8-flash": "Gemini 3.8 Flash", "gemini-3.5-flash-
 const modelName = (m) => MODEL_WORDS[m] || m || "the model";
 const limitsUntouched = () => !S.limits.shortest && !S.limits.curfew && S.limits.drop;
 const usesSavedRun = (text) => !S.forceLive && hasRecording() && text === S.project.context.recorded_run.message && limitsUntouched();
-const thinkLevel = () => S.thinking || S.config.thinking || "high";
-const LEVELS = ["low", "medium", "high"];
-const levelWord = (l) => l[0].toUpperCase() + l.slice(1);
-const THINK_SAY = { low: "Quickest. The model checks its work the least.", medium: "In between.", high: "Slowest. The model checks its work the most." };
-function thinkRead(level) {
-  const m = S.config.thinking_measured?.[level];
-  return m ? `Measured here: about ${m.seconds} seconds a run and ${m.tokens.toLocaleString("en-US")} tokens. ${m.clean} of ${m.runs} test runs ended with no clashes.` : "";
-}
-function thinkLocked() {
-  const r = S.project.context.recorded_run;
-  return `This stays on ${esc(r.thinking || "high")}: saved runs were all recorded at ${esc(r.thinking || "high")} thinking and play back as they were.`;
-}
-function thinkForm(typed) {
+function liveSwitch(typed) {
+  if (!hasRecording() || !S.config.model_configured) return "";
   const saved = usesSavedRun(typed);
-  const level = saved ? S.project.context.recorded_run.thinking || "high" : thinkLevel();
-  return `<div class="think" id="think" data-level="${level}" data-locked="${saved}">
-    <div class="think-top"><label for="think-level">How hard the agent thinks</label><strong id="think-word">${levelWord(level)}</strong></div>
-    <input type="range" id="think-level" min="0" max="2" step="1" value="${LEVELS.indexOf(level)}" aria-valuetext="${levelWord(level)}" ${saved ? "disabled" : ""} />
-    <div class="think-stops" aria-hidden="true">${LEVELS.map((l) => `<span>${levelWord(l)}</span>`).join("")}</div>
-    <div class="think-show" aria-hidden="true">
-      <div><span>Speed</span><div class="think-lane"><i class="think-road"></i><i class="think-car"></i></div></div>
-      <div><span>Checking</span><div class="think-depth"><i></i><i></i><i></i></div></div>
-    </div>
-    <p class="think-say" id="think-say">${saved ? thinkLocked() : `${esc(THINK_SAY[level])} ${esc(thinkRead(level))}`}</p>
-    ${hasRecording() && S.config.model_configured ? `<button type="button" class="link think-switch" data-action="think-live" id="think-switch">${saved ? "Run it live and choose the level" : S.forceLive ? "Back to the saved run" : ""}</button>` : ""}
-  </div>`;
+  return `<button type="button" class="link think-switch" data-action="think-live" id="think-switch" ${saved || S.forceLive ? "" : "hidden"}>${saved ? "Run it live instead" : "Back to the saved run"}</button>`;
 }
-function setThink(level) {
-  const box = $("#think");
-  if (!box) return;
-  box.dataset.level = level;
-  box.style.setProperty("--fill", `${LEVELS.indexOf(level) * 50}%`);
-  $("#think-word").textContent = levelWord(level);
-  const input = $("#think-level");
-  input.value = LEVELS.indexOf(level);
-  input.setAttribute("aria-valuetext", levelWord(level));
-}
-function syncThink(text) {
-  const box = $("#think");
-  if (!box) return;
-  const saved = usesSavedRun(text);
-  const level = saved ? S.project.context.recorded_run.thinking || "high" : thinkLevel();
-  box.dataset.locked = String(saved);
-  $("#think-level").disabled = saved;
-  $("#think-say").innerHTML = saved ? thinkLocked() : `${esc(THINK_SAY[level])} ${esc(thinkRead(level))}`;
+function syncSwitch(text) {
   const sw = $("#think-switch");
-  if (sw) {
-    sw.textContent = saved ? "Run it live and choose the level" : S.forceLive ? "Back to the saved run" : "";
-    sw.hidden = !sw.textContent;
-  }
-  setThink(level);
+  if (!sw) return;
+  const saved = usesSavedRun(text);
+  sw.textContent = saved ? "Run it live instead" : S.forceLive ? "Back to the saved run" : "";
+  sw.hidden = !sw.textContent;
 }
 function limitsSent() {
   return { shortest: +S.limits.shortest || null, curfew: +S.limits.curfew || null, allow_drop: S.limits.drop ? (S.limits.dropChosen ? true : null) : false };
@@ -867,10 +826,9 @@ function askNote(text) {
   if (!S.config.model_configured && !hasRecording()) return "No model is set up on this server.";
   if (usesSavedRun(text)) {
     const r = S.project.context.recorded_run;
-    return `Saved run: no live calls and no cost. Recorded with ${modelName(r.model)} at ${r.thinking || "high"} thinking. Change the words, an option or the lineup for a live run.`;
+    return `Saved run: no live calls and no cost. Recorded with ${modelName(r.model)}. Change the words, an option or the lineup for a live run.`;
   }
-  const m = S.config.thinking_measured?.[thinkLevel()];
-  return `Live run on ${modelName(S.config.models?.[0])} at ${thinkLevel()} thinking: the model decides each step now.${m ? ` Takes about a minute here.` : ""}`;
+  return `Live run on ${modelName(S.config.models?.[0])}: the model decides each step now. Takes about a minute here.`;
 }
 // A failure says so plainly and always leaves something to watch: a saved run made real calls once.
 function failBox(title, reason, after) {
@@ -891,7 +849,7 @@ function askForm() {
     <textarea id="agent-message" rows="${Math.min(8, Math.max(4, Math.ceil(typed.length / 58) + 1))}" placeholder="Main stage is closed 18:00 to 19:00. Curfew is 23:00.">${esc(typed)}</textarea>
     ${a?.error ? failBox("The live run failed", a.error, "Nothing on your timetable changed.") : ""}
     ${limitsForm()}
-    ${thinkForm(typed)}
+    ${liveSwitch(typed)}
     <div class="ask-foot"><button class="primary big" id="ask-go" ${offline ? "disabled" : ""}>${usesSavedRun(typed) ? "Play the saved run" : "Fix this day"}</button>${S.retrying || S.again ? `<button type="button" class="ask-cancel" data-action="cancel-edit">Cancel</button>` : ""}<span class="hint"><kbd>Enter</kbd> starts it. Nothing changes until you approve.</span></div>
     <p class="fine" id="ask-note">${esc(askNote(typed))}</p>
   </form>`;
@@ -915,7 +873,7 @@ function flowRunning() {
   const trace = S.agent?.trace || [];
   const last = trace.at(-1);
   return `<div class="flow-run">
-    <p class="eyebrow">${S.agent?.mode === "live" ? `Live run at ${esc(S.agent.thinking)} thinking: the model is deciding now` : `Saved run, recorded with ${esc(modelName(S.project.context?.recorded_run?.model))} at ${esc(S.project.context?.recorded_run?.thinking || "high")} thinking. No live calls.`}</p>
+    <p class="eyebrow">${S.agent?.mode === "live" ? "Live run: the model is deciding now" : `Saved run, recorded with ${esc(modelName(S.project.context?.recorded_run?.model))}. No live calls.`}</p>
     ${headline("Working on it")}
     <p class="flow-say">${last?.thought ? esc(tryWords(last.thought)) : "Reading what you wrote…"}</p>
     <ol class="live-steps">${trace.map((t) => `<li class="${t.ok ? "" : "refused"}"><strong>${esc(TOOL_WORDS[t.tool] || "Tried a step")}</strong> ${esc(t.line)}</li>`).join("")}<li class="now"><span class="spin" aria-hidden="true"></span>${trace.length ? "Next step…" : "Starting…"}</li></ol>
@@ -924,9 +882,8 @@ function flowRunning() {
 function planSource() {
   const p = S.proposal;
   if (p.changed_by_ask) return "New plan from your request";
-  const at = p.thinking ? ` at ${esc(p.thinking)} thinking` : "";
-  if (p.mode === "live") return `Live run with ${esc(modelName(p.model))}${at}`;
-  return `Saved run, recorded with ${esc(modelName(p.model))}${at}. No live calls`;
+  if (p.mode === "live") return `Live run with ${esc(modelName(p.model))}`;
+  return `Saved run, recorded with ${esc(modelName(p.model))}. No live calls`;
 }
 // What Qloo did for this plan, from the same solve run with every Qloo signal removed.
 const popularity = (id) => (act(id).draw == null ? "" : ` (Qloo popularity ${Math.round(act(id).draw * 100)})`);
@@ -1036,13 +993,8 @@ function renderFlow() {
     const showRunKind = () => {
       $("#ask-note").textContent = askNote(box.value);
       $("#ask-go").textContent = usesSavedRun(box.value) ? "Play the saved run" : "Fix this day";
-      syncThink(box.value);
+      syncSwitch(box.value);
     };
-    $("#think-level").oninput = (e) => {
-      S.thinking = LEVELS[+e.target.value];
-      showRunKind();
-    };
-    syncThink(box.value);
     box.oninput = () => {
       S.typed.agent = box.value;
       showRunKind();
@@ -1194,7 +1146,7 @@ function askPanel() {
       <button class="primary" ${S.asking || off ? "disabled" : ""}>Ask</button>
     </form>
     ${S.asking || off ? "" : `<div class="ask-chips">${askSuggestions(finalOption()).map((q) => `<button type="button" data-action="ask-chip" data-text="${esc(q)}">${esc(q)}</button>`).join("")}</div>`}
-    <p class="lower-foot">${off ? "No model is set up on this server." : `Questions always run live on ${esc(modelName(S.config.models?.[0]))} at ${esc(thinkLevel())} thinking.`}</p>
+    <p class="lower-foot">${off ? "No model is set up on this server." : `Questions always run live on ${esc(modelName(S.config.models?.[0]))}.`}</p>
   </section>`;
 }
 function qlooVerdict(o) {
@@ -1239,7 +1191,7 @@ async function askAgent(raw) {
   S.typed.ask = "";
   renderAfter("plan");
   try {
-    const start = await api(`/proposals/${S.proposal.proposal_id || S.proposal.id}/ask`, "POST", { text, thinking: thinkLevel() });
+    const start = await api(`/proposals/${S.proposal.proposal_id || S.proposal.id}/ask`, "POST", { text });
     for (let n = 0; n < 600; n++) {
       await new Promise((res) => setTimeout(res, 500));
       const j = await api(`/jobs/${start.job_id}`);
@@ -2182,7 +2134,7 @@ const actions = {
     S.again = false;
     S.retrying = false;
     say("");
-    S.agent = { trace: [], mode, message: text, thinking: thinkLevel() };
+    S.agent = { trace: [], mode, message: text };
     S.agentRunning = true;
     S.proposal = null;
     S.view = "draft";
@@ -2190,7 +2142,7 @@ const actions = {
     S.step = stepIndex("agent");
     render();
     try {
-      const start = await api(`/projects/${S.project.id}/agent`, "POST", { version: S.project.version, text, mode, ...(mode === "live" ? { limits: limitsSent(), thinking: thinkLevel() } : {}) });
+      const start = await api(`/projects/${S.project.id}/agent`, "POST", { version: S.project.version, text, mode, ...(mode === "live" ? { limits: limitsSent() } : {}) });
       let seen = 0;
       for (let n = 0; n < 900; n++) {
         await new Promise((res) => setTimeout(res, 500));

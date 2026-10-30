@@ -257,34 +257,14 @@ let active;
       check(`${id}: says it is a saved run`, /saved run/i.test(await page.textContent("#flow .eyebrow")), (await headline()).trim());
     }
 
-    // ---------- How hard the agent thinks ----------
+    // ---------- Saved or live ----------
     await page.goto(`${BASE}/studio?template=${TEMPLATES[0]}`);
     await page.waitForSelector(".template");
     await page.click("#l-go");
-    await page.waitForSelector("#think");
-    check("think: a saved run locks the slider on high and says so", (await page.isDisabled("#think-level")) && (await page.textContent("#think-word")) === "High" && /recorded at high/.test(await page.textContent("#think-say")));
-    check("think: the saved note names the level", /high thinking/.test(await page.textContent("#ask-note")));
-    await page.selectOption("#lim-short", "75");
-    check("think: a change unlocks it", !(await page.isDisabled("#think-level")));
-    await page.selectOption("#lim-short", "");
-    check("think: undoing the change locks it again", await page.isDisabled("#think-level"));
+    await page.waitForSelector("#think-switch");
+    check("switch: no thinking level or speed is shown", !(await page.locator("#think-level, .think-lane").count()) && !/thinking/i.test(await page.textContent("#ask-note")));
     await page.click("#think-switch");
-    check("think: running live is one click", !(await page.isDisabled("#think-level")) && (await page.textContent("#ask-go")).includes("Fix this day"));
-    for (const [v, word] of [["0", "Low"], ["1", "Medium"], ["2", "High"]]) {
-      await page.evaluate((x) => {
-        const i = document.querySelector("#think-level");
-        i.value = x;
-        i.dispatchEvent(new Event("input", { bubbles: true }));
-      }, v);
-      check(`think: ${word} shows its own word, motion and measured time`, (await page.textContent("#think-word")) === word && (await page.getAttribute("#think", "data-level")) === word.toLowerCase() && /Measured here: about \d+ seconds/.test(await page.textContent("#think-say")) && (await page.textContent("#ask-note")).includes(`${word.toLowerCase()} thinking`));
-    }
-    const motion = await page.evaluate(() => getComputedStyle(document.querySelector(".think-road")).animationName !== "none" || matchMedia("(prefers-reduced-motion: reduce)").matches);
-    check("think: the lane moves", motion);
-    await page.evaluate(() => {
-      const i = document.querySelector("#think-level");
-      i.value = 0;
-      i.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    check("switch: running live is one click", (await page.textContent("#ask-go")).includes("Fix this day"));
     let sent = null;
     await page.route("**/agent", (route) => {
       sent = route.request().postDataJSON();
@@ -292,12 +272,10 @@ let active;
     });
     await page.click("#ask-go");
     await page.waitForFunction(() => document.querySelector(".run-failed"));
-    check("think: the chosen level goes with the live request", sent?.mode === "live" && sent?.thinking === "low", JSON.stringify(sent?.thinking));
+    check("switch: a live request goes out", sent?.mode === "live");
     await page.unroute("**/agent");
     await page.click("#think-switch");
-    await page.evaluate(() => (document.querySelector("#think-level").value = 0));
-    await page.waitForSelector("#think[data-locked='true']");
-    check("think: back to the saved run locks it on high", (await page.textContent("#think-word")) === "High" && (await page.textContent("#ask-go")).includes("saved run"));
+    check("switch: back to the saved run", (await page.textContent("#ask-go")).includes("saved run"));
 
     // ---------- Before, without Qloo, with Qloo on the plan ----------
     await page.click("#ask-go");

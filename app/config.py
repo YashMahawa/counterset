@@ -64,7 +64,7 @@ class Config:
         self.model = "gemini-3.5-flash-lite"
         self.models = ["gemini-3.5-flash-lite"]
         # Every model call thinks. A live run can ask for low, medium or high; this is the level when it does not say.
-        self.thinking = "medium" if self.values.get("MODEL_THINKING", "").lower() == "medium" else "high"
+        self.thinking = "high" if self.values.get("MODEL_THINKING", "").lower() == "high" else "medium"
         self.limit = min(5000, int(self.values.get("QLOO_SUCCESS_LIMIT", "5000")))
         self.prior = int(self.values.get("QLOO_PRIOR_SUCCESS", "0"))
         self.model_limit = int(self.values.get("MODEL_CALL_LIMIT", "500"))

@@ -140,14 +140,6 @@ class Resolve(Strict):
     kind: Kind = "artist"
 
 
-def thinking_measured():
-    """Run times per thinking level, from scripts/thinking_bench.py. The slider shows these or no numbers at all."""
-    try:
-        return json.loads((Path(__file__).parent / "thinking_bench.json").read_text())["levels"]
-    except (OSError, ValueError, KeyError):
-        return None
-
-
 def create_app(config=None):
     cfg = config or Config()
     store = Store(cfg.private / "counterset.sqlite3")
@@ -294,7 +286,6 @@ def create_app(config=None):
             "local_only": not bool(cfg.access_token),
             "stale_days": STALE_DAYS,
             "thinking": cfg.thinking,
-            "thinking_measured": thinking_measured(),
         }
 
     @app.get("/api/projects")

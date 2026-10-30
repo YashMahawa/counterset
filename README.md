@@ -20,7 +20,7 @@ This shows what was open, not what the festival should have done. It assumes eve
 
 1. **Pick a day.** Four real timetables are ready, each with real Qloo rows and real clashes. Change any line, or press **Clear it and paste mine** and paste your own: stage, act, start, end. CSV files and spreadsheet rows work too. Press **Check this day**.
 2. **See the clashes.** Each one says how long the acts overlap, how Qloo ranks them against each other and what their crowds share. A day you pasted is looked up and read by Qloo without another button. Drag a set to fix one by hand.
-3. **Say what went wrong, and press Enter.** An example problem is filled in, and you can replace it with anything. Set the shortest a set may get, the last finish and whether sets may be dropped, and choose how hard the model thinks (low, medium or high). An untouched example plays its saved high-thinking run and says so; any change runs live. The agent records the problem and the solver answers each try. This takes about a minute, and the timetable moves as it works. If nothing fits your settings, it says which single change would work, and one press runs that.
+3. **Say what went wrong, and press Enter.** An example problem is filled in, and you can replace it with anything. Set the shortest a set may get, the last finish and whether sets may be dropped. An untouched example plays its saved run and says so; any change runs live. The agent records the problem and the solver answers each try. This takes about a minute, and the timetable moves as it works. If nothing fits your settings, it says which single change would work, and one press runs that.
 4. **Decide.** Compare **Before**, **Without Qloo** and **With Qloo**. Ask the agent why it moved a set, who has a similar crowd, or to change the plan: a change comes back as a new plan to approve. Then press **Approve this plan**. The validator rechecks the plan and saves a numbered version.
 5. **Send it.** You get a timetable link to share and a drafted message for each affected act. Counterset never sends anything itself.
 
@@ -166,7 +166,7 @@ To host it, see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ### Models
 
-`gemini-3.5-flash-lite` runs every live call through the Gemini API, always with thinking on (`MODEL_THINKING`, high by default or medium). It takes up to three free keys in turn. An untouched example plays a saved run instead, made once by `gemini-3.8-flash` with real model, solver and Qloo calls, so it costs nothing and takes seconds. Change the words, an option or the lineup and the run is live. The page says which one you are getting. There is no silent model switch. Everything except the live agent, message reading and briefings works without a model.
+`gemini-3.5-flash-lite` runs every live call through the Gemini API, always with thinking on (`MODEL_THINKING`, medium by default or high). It takes up to three free keys in turn. An untouched example plays a saved run instead, made once by `gemini-3.8-flash` with real model, solver and Qloo calls, so it costs nothing and takes seconds. Change the words, an option or the lineup and the run is live. The page says which one you are getting. There is no silent model switch. Everything except the live agent, message reading and briefings works without a model.
 
 ## Use it from another agent
 
