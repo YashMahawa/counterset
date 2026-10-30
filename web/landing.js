@@ -137,7 +137,7 @@ async function startLive() {
     draw();
     // On a phone the timetable scrolls sideways: start where the day restarts.
     const wrap = $(".board-wrap");
-    if (wrap.scrollWidth > wrap.clientWidth + 8) wrap.scrollLeft = LABEL + (table.storm.end - geometry().from) * geometry().ppm - 70;
+    if (innerWidth < 860) wrap.scrollLeft = LABEL + (table.storm.end - geometry().from) * geometry().ppm - 70;
     let timer;
     addEventListener("resize", () => {
       clearTimeout(timer);
