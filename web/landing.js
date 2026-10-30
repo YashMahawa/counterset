@@ -166,7 +166,7 @@ function names(list) {
   $("#track").innerHTML = line + line;
 }
 
-// ---------- The agent, step by step (each line is from a recorded run, see web/agent-run.json) ----------
+// ---------- The agent, step by step (each line is from the recorded run) ----------
 const STAGES = [
   {
     name: "Reads",
