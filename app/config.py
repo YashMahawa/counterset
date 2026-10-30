@@ -58,5 +58,7 @@ class Config:
         self.public = self.values.get("COUNTERSET_PUBLIC", "").lower() in {"1", "true", "yes"}
         # Unlisted: reachable by link, but asks search engines and AI crawlers to stay out.
         self.unlisted = self.values.get("COUNTERSET_UNLISTED", "").lower() in {"1", "true", "yes"}
+        # On a very small server, "Watch the agent" shows the saved run and rechecks its plan.
+        self.saved_replay = self.values.get("COUNTERSET_SAVED_REPLAY", "").lower() in {"1", "true", "yes"}
         self.agent_per_hour = int(self.values.get("AGENT_RUNS_PER_VISITOR_HOUR", "3"))
         self.agent_per_day = int(self.values.get("AGENT_RUNS_PER_DAY", "40"))

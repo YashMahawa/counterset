@@ -339,11 +339,13 @@ const STEPS = [
     panel: () => {
       const running = S.agentRunning;
       const a = S.agent;
-      const note = a?.mode === "replay" && S.project.context?.recorded_run
+      const note = a?.mode === "replay" && S.config.saved_replay && S.project.context?.recorded_run
+        ? `<p class="fine">Saved run from ${esc(S.project.context.recorded_run.model)}, ${esc(dateOf(S.project.context.recorded_run.at))}. This small demo server shows the saved steps and results, and the validator rechecks the final plan now. Run it live to have the model decide again.</p>`
+        : a?.mode === "replay" && S.project.context?.recorded_run
         ? `<p class="fine">Recorded decisions from ${esc(S.project.context.recorded_run.model)}, ${esc(dateOf(S.project.context.recorded_run.at))}. Every tool is running again now: the solver and validator results below are live.</p>`
         : a?.mode === "live"
           ? `<p class="fine">Live run: this model is deciding each step now.</p>`
-          : `<p class="fine">Watch replays the model's recorded decisions and re-runs every tool. Run it live calls the model now and can take a couple of minutes.</p>`;
+          : `<p class="fine">${S.config.saved_replay ? "Watch shows a saved run and rechecks its final plan." : "Watch replays the model's recorded decisions and re-runs every tool."} Run it live calls the model now and can take a few minutes.</p>`;
       return `<label>Message from production<textarea id="agent-message" rows="4" ${running ? "disabled" : ""}>${esc(S.typed.agent ?? (a?.message || S.proposal?.message || sampleMessage()))}</textarea></label>
       ${note}
       ${a?.error ? `<p class="note bad">${esc(a.error)}.${hasRecording() ? " You can watch the recorded run again." : ""}</p>` : ""}

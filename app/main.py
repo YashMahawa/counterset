@@ -249,6 +249,7 @@ def create_app(config=None):
     def settings():
         return {
             "public": cfg.public,
+            "saved_replay": cfg.saved_replay,
             "qloo_configured": bool(cfg.qloo_key) and not cfg.public,
             "model_configured": bool(cfg.model_key),
             "models": cfg.models,
@@ -460,6 +461,40 @@ def create_app(config=None):
                 jid,
             )
 
+        def run_saved():
+            """Show the saved run step by step. The validator still rechecks the plan here and now."""
+            saved = recorded["saved"]
+            try:
+                for item in saved["trace"]:
+                    step(item)
+                    time.sleep(1.2)
+                sandbox = Day.model_validate(saved["proposal"]["day"])
+                option = saved["proposal"]["options"][0]
+                places = [Placement.model_validate(x) for x in option["placements"]]
+                checked = audit(sandbox, places, all_edges(sandbox, p["evidence"]), saved["proposal"]["budget"])
+                if not checked["passed"]:
+                    raise ValueError("The validator refused the saved plan; nothing was applied")
+                proposal = {
+                    **saved["proposal"],
+                    "project": id,
+                    "input_version": req.version,
+                    "input_hash": hash,
+                    "evidence_id": p["evidence"].get("id"),
+                    "created": time.time(),
+                    "trace": trace,
+                    "mode": "saved",
+                    "model": recorded["model"],
+                    "message": req.text,
+                }
+                pid = store.put("proposal", proposal)
+                store.put(
+                    "job",
+                    {"status": "COMPLETED", "label": "Rescue agent", "progress": 1, "trace": trace, "mode": "saved", "result": {"proposal_id": pid, **proposal}},
+                    jid,
+                )
+            except (ValueError, KeyError) as e:
+                store.put("job", {"status": "FAILED", "label": "Rescue agent", "error": str(e), "trace": trace, "mode": "saved"}, jid)
+
         def run():
             try:
                 outcome = desk_agent.run(
@@ -494,7 +529,7 @@ def create_app(config=None):
                 message = str(e) if known else "The agent stopped; nothing was applied"
                 store.put("job", {"status": "FAILED", "label": "Rescue agent", "error": message, "trace": trace, "mode": req.mode}, jid)
 
-        pool.submit(run)
+        pool.submit(run_saved if req.mode == "replay" and cfg.saved_replay and recorded.get("saved") else run)
         return {"job_id": jid}
 
     @app.get("/api/rescue-table")

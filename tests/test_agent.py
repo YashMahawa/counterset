@@ -293,3 +293,27 @@ def test_unlisted_mode_asks_crawlers_to_stay_out(tmp_path):
     c = TestClient(create_app(cfg))
     assert c.get("/api/config").headers["x-robots-tag"].startswith("noindex")
     assert "Disallow: /" in c.get("/robots.txt").text.splitlines()
+
+
+def test_saved_replay_shows_saved_steps_and_validator_rechecks(tmp_path):
+    c, app, cfg = ready(tmp_path, recorded=True)
+    cfg.saved_replay = True
+    file = tmp_path / "examples/mini.json"
+    ex = json.loads(file.read_text())
+    out = desk_agent.run(day(), EVIDENCE, CONTEXT, MESSAGE, None, "m", turns=GOOD, seconds=4)
+    plain = lambda v: json.loads(json.dumps(v))
+    ex["context"]["recorded_run"]["saved"] = {"trace": plain(out["trace"]), "proposal": plain(desk_agent.to_proposal(out, day()))}
+    file.write_text(json.dumps(ex))
+    p = c.post("/api/examples/mini", headers=H).json()
+    j = finish(c, c.post(f"/api/projects/{p['id']}/agent", headers=H, json={"version": 1, "text": MESSAGE, "mode": "replay"}).json()["job_id"])
+    assert j["status"] == "COMPLETED", j
+    assert j["mode"] == "saved" and len(j["trace"]) == len(GOOD)
+    pub = c.post(f"/api/projects/{p['id']}/publish", headers=H, json={"version": 1, "proposal_id": j["result"]["proposal_id"], "option": 0})
+    assert pub.status_code == 200, pub.text
+    # A tampered plan is refused by the validator rather than shown.
+    ex = json.loads(file.read_text())
+    ex["context"]["recorded_run"]["saved"]["proposal"]["options"][0]["placements"][0]["start"] = 0
+    file.write_text(json.dumps(ex))
+    p = c.post("/api/examples/mini", headers=H).json()
+    j = finish(c, c.post(f"/api/projects/{p['id']}/agent", headers=H, json={"version": 1, "text": MESSAGE, "mode": "replay"}).json()["job_id"])
+    assert j["status"] == "FAILED" and "validator" in j["error"]
