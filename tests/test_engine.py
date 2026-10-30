@@ -286,3 +286,118 @@ def test_alternative_priority_matches_bruteforce_displacement_first():
         a["cue_overlap_minutes"],
     ) == min(scores)
 
+
+
+# ---------- Rescue: shorter and dropped sets ----------
+def rescue_day(allow_trim=True, allow_cut=True, closes=1080, floor=30):
+    """Two stages, one hour each after a hold: three 40-minute sets cannot all fit at full length."""
+    return Day.model_validate(
+        {
+            "name": "Rescue",
+            "grid": 5,
+            "allow_trim": allow_trim,
+            "allow_cut": allow_cut,
+            "stages": [{"id": "a", "name": "A", "opens": 960, "closes": closes}],
+            "acts": [
+                {
+                    "id": str(i),
+                    "name": f"Act {i}",
+                    "duration": 40,
+                    "changeover": 5,
+                    "allowed_stages": ["a"],
+                    "earliest": 960,
+                    "latest": 1200,
+                    "min_duration": floor,
+                }
+                for i in range(3)
+            ],
+            "draft": [{"act_id": str(i), "stage_id": "a", "start": 960 + 45 * i} for i in range(3)],
+        }
+    )
+
+
+def test_rescue_prefers_shortening_every_set_over_dropping_one():
+    day = rescue_day(closes=1070)
+    out = solve(day, [], budget=3, seconds=5)
+    assert out["status"] == "OPTIMAL"
+    assert out["audit"]["cuts"] == []
+    # 110 minutes of stage, 10 of changeover: 100 of the 120 minutes of music can play.
+    assert out["audit"]["trim_minutes"] == 20
+    assert audit(day, [Placement.model_validate(p) for p in out["placements"]], [], 3)["passed"]
+
+
+def test_rescue_drops_one_set_only_when_the_shortest_sets_still_do_not_fit():
+    out = solve(rescue_day(closes=1040, floor=30), [], budget=3, seconds=5)
+    assert out["status"] == "OPTIMAL"
+    assert len(out["audit"]["cuts"]) == 1
+    assert out["audit"]["passed"]
+
+
+def test_rescue_without_permission_reports_conflict_instead_of_cutting():
+    out = solve(rescue_day(allow_cut=False, closes=1040), [], budget=3, seconds=5)
+    assert out["status"] == "INFEASIBLE"
+
+
+def test_validator_refuses_unapproved_or_out_of_range_rescues():
+    day = rescue_day(allow_trim=False, allow_cut=False, closes=1200)
+    base = [{"act_id": str(i), "stage_id": "a", "start": 960 + 45 * i} for i in range(3)]
+    cut = [Placement(**{**base[0], "cut": True}), *[Placement(**x) for x in base[1:]]]
+    assert any("dropping" in e for e in audit(day, cut, [])["errors"])
+    short = [Placement(**{**base[0], "length": 30}), *[Placement(**x) for x in base[1:]]]
+    assert any("cannot be shortened" in e for e in audit(day, short, [])["errors"])
+    allowed = rescue_day(closes=1200)
+    too_short = [Placement(**{**base[0], "length": 20}), *[Placement(**x) for x in base[1:]]]
+    assert any("outside what the act accepts" in e for e in audit(allowed, too_short, [])["errors"])
+
+
+def test_headliner_is_never_shortened_or_dropped():
+    data = rescue_day(closes=1040).model_dump()
+    data["acts"][0]["headliner"] = True
+    data["acts"][0]["min_duration"] = None
+    out = solve(Day.model_validate(data), [], budget=3, seconds=5)
+    assert "0" not in out["audit"]["cuts"] and "0" not in out["audit"]["trimmed"]
+
+
+def test_rescue_counts_match_a_brute_force_search():
+    # Every start, length and drop combination on a small day, checked by the validator alone.
+    from itertools import product
+
+    day = rescue_day(closes=1040)
+    options = [("cut", None, None)] + [
+        (None, s, ln) for s in range(960, 1040, 5) for ln in (30, 35, 40)
+    ]
+    best = None
+    for combo in product(options, repeat=3):
+        places = [
+            Placement(act_id=str(i), stage_id="a", start=day.draft[i].start, cut=True)
+            if c[0]
+            else Placement(act_id=str(i), stage_id="a", start=c[1], length=None if c[2] == 40 else c[2])
+            for i, c in enumerate(combo)
+        ]
+        a = audit(day, places, [], 3)
+        if a["passed"]:
+            score = (len(a["cuts"]), a["trim_minutes"])
+            best = score if best is None or score < best else best
+    out = solve(day, [], budget=3, seconds=8)
+    assert (len(out["audit"]["cuts"]), out["audit"]["trim_minutes"]) == best
+
+
+def test_a_dropped_set_never_counts_as_shortened_minutes():
+    from ortools.sat.python import cp_model
+    from app.solver import build, _solver
+
+    day = rescue_day()
+    m, _start, _stage, _ids, lengths, cuts, *_ = build(day, [], 3)
+    m.add(cuts["0"] == 1)
+    m.add(lengths["0"] < day.acts[0].duration)
+    assert _solver(5).solve(m) == cp_model.INFEASIBLE
+
+
+def test_scenario_opens_rescue_terms_without_touching_the_saved_day():
+    from app.repair import apply_scenario
+
+    day = rescue_day(allow_trim=False, allow_cut=False)
+    out = apply_scenario(day, {"curfew": 1100, "shortest": 75, "allow_cut": True})
+    assert out.allow_trim and out.allow_cut and out.stages[0].closes == 1100
+    assert out.acts[0].min_duration == 30
+    assert not day.allow_trim and day.stages[0].closes == 1080

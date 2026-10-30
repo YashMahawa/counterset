@@ -48,6 +48,9 @@ class Placement(Strict):
     act_id: str
     stage_id: str
     start: int = Field(ge=0, le=2880)
+    # A rescue may play a shorter set (length) or, with a person's approval, not play it (cut).
+    length: int | None = Field(default=None, ge=5, le=240)
+    cut: bool = False
 
 
 class Act(Strict):
@@ -65,6 +68,12 @@ class Act(Strict):
     latest: int = Field(ge=1, le=2880)
     locked: bool = False
     genre: str = Field(default="unclassified", max_length=80)
+    # Shortest set the act would accept. None means it cannot be shortened.
+    min_duration: int | None = Field(default=None, ge=5, le=240)
+    # A headliner may move but is never shortened or dropped by a rescue.
+    headliner: bool = False
+    # Qloo's popularity for the act, 0 to 1. If a set must go, the smallest draw goes first.
+    draw: float | None = Field(default=None, ge=0, le=1)
 
 
 class Pair(Strict):
@@ -95,6 +104,12 @@ class Day(Strict):
     k: int = Field(default=3, ge=1, le=10)
     unknown_policy: Literal["report", "cautious"] = "report"
     repair_priority: Priority = "fewest_acts"
+    # Rescue rules stay off until a person turns them on for a repair.
+    allow_trim: bool = False
+    allow_cut: bool = False
+    # A hold normally freezes sets that began before it. A day that replays a closure
+    # from the start (gates never opened) turns this off and locks what really played.
+    auto_lock_started: bool = True
 
     @model_validator(mode="after")
     def references(self):
@@ -111,6 +126,8 @@ class Day(Strict):
         for a in self.acts:
             if not set(a.allowed_stages) <= stages or a.earliest >= a.latest:
                 raise ValueError(f"{a.name}: invalid stages or availability window")
+            if a.min_duration is not None and a.min_duration > a.duration:
+                raise ValueError(f"{a.name}: shortest set is longer than the set")
         for p in self.draft:
             if p.stage_id not in stages:
                 raise ValueError("Unknown draft stage")

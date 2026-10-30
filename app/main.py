@@ -10,28 +10,44 @@ from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field
 from .agent import brief, llm_baseline, propose_changes
+from . import desk_agent
 from .config import Config
-from .domain import Day, Outage, Placement, Priority, Strict, Kind, QLOO_TYPES, digest, reference_hash
+from .domain import Day, Placement, Priority, Strict, Kind, QLOO_TYPES, digest, reference_hash
 from .evidence import age_days, all_edges, attendee_edges, entities, fetch_snapshot, genre_edges, identity_key
 from .examples import Examples
 from .fixtures import demo
 from .providers import Gateway, ProviderError
-from .repair import placements, plan
+from .repair import apply_scenario, as_run_audit, hold_stage, placements, plan, site_hold
 from .solver import solve
 from .stats import random_fill
 from .store import Store
 from .validator import audit
 
-STALE_DAYS = 14
+STALE_DAYS = 30
 
 
 class Versioned(Strict):
     version: int
 
 
+class Terms(Strict):
+    curfew: int | None = Field(default=None, ge=0, le=2880)
+    shortest: int = Field(default=100, ge=40, le=100)
+    allow_cut: bool = False
+    # Replay days only: solve as if the site closed when it really did.
+    close_site: bool = False
+
+
 class Repair(Versioned):
     move_budget: int = Field(default=4, ge=0, le=50)
     seconds: float = Field(default=8, ge=0.01, le=30)
+    scenario: Terms | None = None
+
+
+class AgentRun(Versioned):
+    text: str = Field(min_length=1, max_length=4000)
+    mode: str = "replay"
+    model: str = "gemini-3.5-flash-lite"
 
 
 class Change(Versioned):
@@ -103,6 +119,7 @@ def create_app(config=None):
     examples = Examples(cfg.private / "examples")
     pool = ThreadPoolExecutor(max_workers=2)
     fills = {}
+    agent_hits = {}
     app = FastAPI(title="Counterset", docs_url="/api/docs")
     app.state.store = store
     app.state.gateway = gateway
@@ -134,6 +151,9 @@ def create_app(config=None):
             ):
                 return Response("Authentication required", status_code=401)
             if request.method not in {"GET", "HEAD", "OPTIONS"}:
+                length = request.headers.get("content-length")
+                if length and length.isdigit() and int(length) > 400_000:
+                    return Response("Request too large", status_code=413)
                 if request.headers.get("x-counterset") != "workspace":
                     return Response("Workspace header required", status_code=403)
                 origin = request.headers.get("origin")
@@ -203,6 +223,14 @@ def create_app(config=None):
             fills[key] = random_fill(day, places, evidence["edges"], seed=17)
         return fills[key]
 
+    def ran(day, p):
+        """The record of what really happened on this day, scored like any repair."""
+        context = p.get("context", {})
+        if not context.get("as_run") or p["version"] != 1:
+            return None
+        terms = {"curfew": context.get("storm", {}).get("curfew"), "allow_cut": True}
+        return as_run_audit(apply_scenario(day, terms), p["evidence"], context["as_run"])
+
     def evidence_state(e):
         if not e:
             return {"loaded": False}
@@ -212,7 +240,8 @@ def create_app(config=None):
     @app.get("/api/config")
     def settings():
         return {
-            "qloo_configured": bool(cfg.qloo_key),
+            "public": cfg.public,
+            "qloo_configured": bool(cfg.qloo_key) and not cfg.public,
             "model_configured": bool(cfg.model_key),
             "models": cfg.models,
             "budget": gateway.budget(),
@@ -223,6 +252,9 @@ def create_app(config=None):
 
     @app.get("/api/projects")
     def projects():
+        # A public deployment never lists other visitors' workspaces.
+        if cfg.public:
+            return []
         return [
             {"id": p["id"], "name": p["day"]["name"], "version": p["version"], "kind": p.get("context", {}).get("kind")}
             for p in store.list("project")
@@ -269,6 +301,7 @@ def create_app(config=None):
             **p,
             "evidence_state": evidence_state(p["evidence"]),
             "audit": audit(day, day.draft, edges),
+            "as_run_audit": ran(day, p),
             "random_fill": fill(day, p["evidence"], day.draft),
             "proposals": [r for r in store.list("proposal") if r["project"] == id][:6],
             "notes": [r for r in store.list("note") if r["project"] == id][:10],
@@ -286,6 +319,8 @@ def create_app(config=None):
 
     @app.post("/api/resolve")
     def resolve(req: Resolve):
+        if cfg.public:
+            raise HTTPException(403, "Live Qloo search is off on the public demo. The worked examples use recorded Qloo rows.")
         payload, source = gateway.qloo("/search", {"query": req.query, "types": QLOO_TYPES[req.kind], "take": 5})
         return {
             "source": source,
@@ -317,6 +352,8 @@ def create_app(config=None):
     @app.post("/api/projects/{id}/evidence")
     def evidence(id, req: EvidenceRequest):
         p, day = current(id, req.version)
+        if req.source == "live" and cfg.public:
+            raise HTTPException(403, "Live Qloo queries are off on the public demo. The worked examples use recorded Qloo rows.")
         if req.source not in {"cache", "live"}:
             raise HTTPException(422, "Choose cache or live evidence")
         if sum(bool(a.qloo_id) for a in day.acts) < 2:
@@ -343,8 +380,17 @@ def create_app(config=None):
             raise HTTPException(422, "Load Qloo evidence before repairing")
         hash = reference_hash(day, p["evidence"])
 
+        scenario = req.scenario.model_dump(exclude_none=True) if req.scenario else None
+        base = day
+        if scenario and scenario.pop("close_site", False):
+            storm = p.get("context", {}).get("storm")
+            if not storm:
+                raise HTTPException(422, "This day has no recorded closure")
+            base = site_hold(day, storm["start"], storm["end"], "Site evacuated")
+            scenario["close_site"] = True
+
         def work(progress):
-            result = plan(day, p["evidence"], req.move_budget, req.seconds, progress)
+            result = plan(base, p["evidence"], req.move_budget, req.seconds, progress, scenario)
             result.update(
                 {
                     "project": id,
@@ -355,10 +401,101 @@ def create_app(config=None):
                     "created": time.time(),
                 }
             )
+            if scenario:
+                result["scenario"] = scenario
+                result["day"] = apply_scenario(base, scenario).model_dump()
             pid = store.put("proposal", result)
             return {"proposal_id": pid, **result}
 
         return background("Schedule repair", work)
+
+    def agent_allowed(request):
+        """Live runs spend a shared free model quota, so each visitor gets a few."""
+        now = time.time()
+        ip = request.client.host if request.client else "unknown"
+        hits = [t for t in agent_hits.get(ip, []) if now - t < 3600]
+        total = sum(1 for v in agent_hits.values() for t in v if now - t < 86400)
+        if len(hits) >= cfg.agent_per_hour or total >= cfg.agent_per_day:
+            raise HTTPException(429, "Live agent runs are capped on the public demo. Watch the recorded run: its tools are re-run for you now.")
+        agent_hits[ip] = [*hits, now]
+
+    @app.post("/api/projects/{id}/agent")
+    def agent_run(id, req: AgentRun, request: Request):
+        p, day = current(id, req.version)
+        if not p["evidence"]:
+            raise HTTPException(422, "Load Qloo evidence before running the agent")
+        context = p.get("context", {})
+        recorded = context.get("recorded_run")
+        if req.mode == "replay":
+            if not recorded:
+                raise HTTPException(422, "This day has no recorded run. Run the agent live.")
+            if p["version"] != 1 or req.text != recorded["message"]:
+                raise HTTPException(409, "The recorded run only fits the untouched day and its original message. Run the agent live instead.")
+        elif req.mode == "live":
+            if not cfg.model_key:
+                raise HTTPException(422, "No model is configured. Watch the recorded run instead.")
+            if req.model not in cfg.models:
+                raise HTTPException(422, "Choose a configured model")
+            if cfg.public:
+                agent_allowed(request)
+        else:
+            raise HTTPException(422, "Choose live or replay")
+        hash = reference_hash(day, p["evidence"])
+        jid = store.put("job", {"status": "RUNNING", "label": "Rescue agent", "progress": 0, "trace": [], "created": time.time(), "mode": req.mode})
+        trace = []
+
+        def step(item):
+            trace.append({k: v for k, v in item.items()})
+            store.put(
+                "job",
+                {"status": "RUNNING", "label": "Rescue agent", "progress": min(0.95, len(trace) / 11), "detail": item["line"], "trace": trace, "mode": req.mode},
+                jid,
+            )
+
+        def run():
+            try:
+                outcome = desk_agent.run(
+                    day, p["evidence"], context, req.text, gateway, req.model, step,
+                    turns=recorded["decisions"] if req.mode == "replay" else None, seconds=10,
+                )
+                proposal = desk_agent.to_proposal(outcome, day)
+                proposal.update(
+                    {
+                        "project": id,
+                        "input_version": req.version,
+                        "input_hash": hash,
+                        "evidence_id": p["evidence"].get("id"),
+                        "created": time.time(),
+                        "trace": trace,
+                        "mode": req.mode,
+                        "recorded": {k: recorded[k] for k in ("model", "at")} if req.mode == "replay" else None,
+                        "model": req.model if req.mode == "live" else recorded["model"],
+                        "usage": outcome["usage"],
+                        "decisions": outcome["decisions"],
+                        "message": req.text,
+                    }
+                )
+                pid = store.put("proposal", proposal)
+                store.put(
+                    "job",
+                    {"status": "COMPLETED", "label": "Rescue agent", "progress": 1, "trace": trace, "mode": req.mode, "result": {"proposal_id": pid, **proposal}},
+                    jid,
+                )
+            except Exception as e:
+                known = isinstance(e, (ProviderError, ValueError, desk_agent.AgentStop))
+                message = str(e) if known else "The agent stopped; nothing was applied"
+                store.put("job", {"status": "FAILED", "label": "Rescue agent", "error": message, "trace": trace, "mode": req.mode}, jid)
+
+        pool.submit(run)
+        return {"job_id": jid}
+
+    @app.get("/api/rescue-table")
+    def rescue_table():
+        """The storm replay under every pair of terms, for the public page's live control."""
+        try:
+            return examples.get("bonnaroo-2026-sunday")["context"]["rescue_table"]
+        except (KeyError, HTTPException):
+            raise HTTPException(404, "The storm replay is not installed here") from None
 
     @app.post("/api/proposals/{pid}/briefing")
     def briefing(pid, req: Briefing):
@@ -392,16 +529,7 @@ def create_app(config=None):
     def hold(id, req: Hold):
         with store.lock:
             p, day = current(id, req.version)
-            return bump(id, p, apply_hold(day, req.stage_id, req.start, req.end, req.reason), f"Stage hold {req.reason}")
-
-    def apply_hold(day, stage_id, start, end, reason):
-        day.outages.append(Outage(stage_id=stage_id, start=start, end=end, reason=reason))
-        # Sets that began before the hold cannot be moved.
-        for a in day.acts:
-            d = next(x for x in day.draft if x.act_id == a.id)
-            if d.start < start:
-                a.locked = True
-        return Day.model_validate(day.model_dump())
+            return bump(id, p, hold_stage(day, req.stage_id, req.start, req.end, req.reason), f"Stage hold {req.reason}")
 
     @app.post("/api/projects/{id}/messages")
     def message(id, req: Message):
@@ -437,7 +565,7 @@ def create_app(config=None):
                     continue
                 acts = {a.id: a for a in day.acts}
                 if item["action"] == "stage_hold":
-                    day = apply_hold(day, item["stage_id"], item["start"], item["end"], item["quote"][:200])
+                    day = hold_stage(day, item["stage_id"], item["start"], item["end"], item["quote"][:200])
                 elif item["action"] == "not_before":
                     acts[item["act_id"]].earliest = item["value"]
                 elif item["action"] == "finish_by":
@@ -473,6 +601,9 @@ def create_app(config=None):
             if option["status"] not in {"OPTIMAL", "FEASIBLE"}:
                 raise HTTPException(422, "That option has no feasible schedule")
             places = [Placement.model_validate(x) for x in option["placements"]]
+            # An agent or rescue repair carries its own terms; they only become real here.
+            if proposal.get("day"):
+                day = Day.model_validate(proposal["day"])
             checked = audit(day, places, all_edges(day, p["evidence"]), proposal["budget"])
             if not checked["passed"] or checked["counts"] != option["audit"]["counts"]:
                 raise HTTPException(422, "The independent validator rejected this schedule")
@@ -485,6 +616,7 @@ def create_app(config=None):
                 "proposal_id": req.proposal_id,
                 "option": req.option,
                 "option_priority": option["priority"],
+                "notices": proposal.get("notices", []),
                 "solver_status": option["status"],
                 "placements": option["placements"],
                 "previous": before,
@@ -498,7 +630,14 @@ def create_app(config=None):
             }
             pubid = store.put("published", pub)
             p["published"].append(pubid)
+            # The approved lengths become the new facts, and the rescue terms close again.
+            for act, place in ((a, next(x for x in places if x.act_id == a.id)) for a in day.acts):
+                if place.length is not None:
+                    act.duration = place.length
+                    place.length = None
+                act.min_duration = None
             day.draft = places
+            day.allow_trim = day.allow_cut = False
             p = bump(id, p, day, f"Published v{number}")
             p["status"] = "PUBLISHED"
             store.put("project", p, id)
@@ -517,7 +656,7 @@ def create_app(config=None):
         if format != "csv":
             raise HTTPException(422, "Choose json or csv")
         buf = io.StringIO()
-        writer = csv.DictWriter(buf, fieldnames=["artist", "kind", "stage", "start", "end", "changed", "previous_stage", "previous_start", "act_id"])
+        writer = csv.DictWriter(buf, fieldnames=["artist", "kind", "status", "stage", "start", "end", "changed", "previous_stage", "previous_start", "act_id"])
         writer.writeheader()
         acts = {a["id"]: a for a in pub["day"]["acts"]}
         stages = {s["id"]: s for s in pub["day"]["stages"]}
@@ -532,13 +671,16 @@ def create_app(config=None):
         for place in sorted(pub["placements"], key=lambda x: (x["stage_id"], x["start"])):
             a = acts[place["act_id"]]
             old = before.get(place["act_id"], place)
+            # A dropped set has no slot; its old one stays in the previous_ columns.
+            dropped = bool(place.get("cut"))
             writer.writerow(
                 {
                     "artist": safe(a["name"]),
                     "kind": a.get("kind", "artist"),
-                    "stage": safe(stages[place["stage_id"]]["name"]),
-                    "start": clock(place["start"]),
-                    "end": clock(place["start"] + a["duration"]),
+                    "stage": "" if dropped else safe(stages[place["stage_id"]]["name"]),
+                    "start": "" if dropped else clock(place["start"]),
+                    "end": "" if dropped else clock(place["start"] + (place.get("length") or a["duration"])),
+                    "status": "dropped" if place.get("cut") else "shortened" if place.get("length") else "plays",
                     "changed": "yes" if old != place else "",
                     "previous_stage": safe(stages[old["stage_id"]]["name"]),
                     "previous_start": clock(old["start"]),
@@ -616,6 +758,9 @@ def create_app(config=None):
     def studio():
         return FileResponse(cfg.root / "web/studio.html")
 
+    from .mcp import mount_mcp
+
+    mount_mcp(app, cfg, examples)
     app.mount("/web", StaticFiles(directory=cfg.root / "web"), name="web")
     return app
 

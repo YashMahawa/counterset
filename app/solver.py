@@ -1,9 +1,14 @@
 """Lexicographic CP-SAT repair. Models propose; this engine decides feasibility."""
 
+import os
 import time
 from ortools.sat.python import cp_model
 from .domain import Day, Placement, canonical_pair
-from .validator import audit
+from .validator import audit, draw_of
+
+
+# One worker keeps ordinary repairs deterministic. Rescues search a far larger space.
+RESCUE_WORKERS = int(os.environ.get("COUNTERSET_SOLVER_WORKERS", "8"))
 
 
 def clock(n):
@@ -14,6 +19,7 @@ def build(day: Day, edges: list[dict], budget: int):
     """Hard rules are guarded by named literals so an infeasibility can be explained."""
     m = cp_model.CpModel()
     start, stage, moved, displacement = {}, {}, [], []
+    lengths, cuts = {}, {}
     by_stage = {s.id: [] for s in day.stages}
     stage_ids = [s.id for s in day.stages]
     names = {s.id: s.name for s in day.stages}
@@ -26,14 +32,41 @@ def build(day: Day, edges: list[dict], budget: int):
         guards[label] = b
         return b
 
+    trim_terms = []
+    decisions = []
     for a in day.acts:
+        draft = drafts[a.id]
         t = m.new_int_var(0, 2880 // day.grid, f"t_{a.id}")
         start[a.id] = t * day.grid
-        st = m.new_int_var(0, len(stage_ids) - 1, f"stage_{a.id}")
+        decisions.append(t)
+        # Stage index n means "not playing"; the domain only reaches it when cuts are possible.
+        may_cut = (day.allow_cut and not a.locked and not a.headliner) or draft.cut
+        st = m.new_int_var(0, len(stage_ids) - (0 if may_cut else 1), f"stage_{a.id}")
         stage[a.id] = st
+        cut = m.new_bool_var(f"cut_{a.id}")
+        cuts[a.id] = cut
+        decisions += [st, cut]
+        if not may_cut:
+            m.add(cut == 0)
+        if draft.cut:
+            m.add(cut == 1)
+        # A set may only be shortened in whole grid steps, down to what the act accepts.
+        if day.allow_trim and a.min_duration is not None and not a.locked and not a.headliner:
+            values = sorted({*range(a.min_duration, a.duration, day.grid), a.duration})
+            length = m.new_int_var_from_domain(cp_model.Domain.from_values(values), f"length_{a.id}")
+            trim_terms.append(a.duration - length)
+            decisions.append(length)
+            # A dropped set is not a shortened one: without this, a search stopped by the clock
+            # can count minutes on a set that never plays and fail the independent recount.
+            m.add(length == a.duration).only_enforce_if(cut)
+        else:
+            length = a.duration
+        lengths[a.id] = length
+        occupied_until = m.new_int_var(0, 3300, f"occupied_{a.id}")
+        m.add(occupied_until == start[a.id] + length + a.changeover)
         window = guard(f"{a.name}: available {clock(a.earliest)}–{clock(a.latest)}")
-        m.add(start[a.id] >= a.earliest).only_enforce_if(window)
-        m.add(start[a.id] + a.duration <= a.latest).only_enforce_if(window)
+        m.add(start[a.id] >= a.earliest).only_enforce_if([window, cut.Not()])
+        m.add(start[a.id] + length <= a.latest).only_enforce_if([window, cut.Not()])
         choices = []
         for i, s in enumerate(day.stages):
             chosen = m.new_bool_var(f"{a.id}_{s.id}")
@@ -44,28 +77,35 @@ def build(day: Day, edges: list[dict], budget: int):
                 m.add(chosen == 0)
             m.add(start[a.id] >= s.opens).only_enforce_if(chosen)
             # Curfew binds the set itself; changeover only separates consecutive sets.
-            m.add(start[a.id] + a.duration <= s.closes).only_enforce_if(chosen)
+            m.add(start[a.id] + length <= s.closes).only_enforce_if(chosen)
             by_stage[s.id].append(
-                m.new_optional_fixed_size_interval_var(
-                    start[a.id], a.duration + a.changeover, chosen, f"interval_{a.id}_{s.id}"
+                m.new_optional_interval_var(
+                    start[a.id],
+                    length + a.changeover,
+                    occupied_until,
+                    chosen,
+                    f"interval_{a.id}_{s.id}",
                 )
             )
-        m.add_exactly_one(choices)
+        m.add_exactly_one([*choices, cut])
         same_t = m.new_bool_var(f"same_time_{a.id}")
         same_s = m.new_bool_var(f"same_stage_{a.id}")
-        m.add(start[a.id] == drafts[a.id].start).only_enforce_if(same_t)
-        m.add(start[a.id] != drafts[a.id].start).only_enforce_if(same_t.Not())
-        m.add(st == stage_ids.index(drafts[a.id].stage_id)).only_enforce_if(same_s)
-        m.add(st != stage_ids.index(drafts[a.id].stage_id)).only_enforce_if(same_s.Not())
+        m.add(start[a.id] == draft.start).only_enforce_if(same_t)
+        m.add(start[a.id] != draft.start).only_enforce_if(same_t.Not())
+        m.add(st == stage_ids.index(draft.stage_id)).only_enforce_if(same_s)
+        m.add(st != stage_ids.index(draft.stage_id)).only_enforce_if(same_s.Not())
         changed = m.new_bool_var(f"moved_{a.id}")
-        m.add_bool_or([same_t.Not(), same_s.Not()]).only_enforce_if(changed)
-        m.add_bool_and([same_t, same_s]).only_enforce_if(changed.Not())
+        # A dropped set is reported as dropped, not as moved, and keeps its old slot on file.
+        m.add(start[a.id] == draft.start).only_enforce_if(cut)
+        m.add(changed == 0).only_enforce_if(cut)
+        m.add_bool_or([same_t.Not(), same_s.Not()]).only_enforce_if([changed, cut.Not()])
+        m.add_bool_and([same_t, same_s]).only_enforce_if([changed.Not(), cut.Not()])
         moved.append(changed)
         if a.locked:
-            lock = guard(f"{a.name}: locked at {names[drafts[a.id].stage_id]} {clock(drafts[a.id].start)}")
+            lock = guard(f"{a.name}: locked at {names[draft.stage_id]} {clock(draft.start)}")
             m.add(changed == 0).only_enforce_if(lock)
         d = m.new_int_var(0, 2880, f"displacement_{a.id}")
-        m.add_abs_equality(d, start[a.id] - drafts[a.id].start)
+        m.add_abs_equality(d, start[a.id] - draft.start)
         displacement.append(d)
     for o in day.outages:
         lit = guard(f"{names[o.stage_id]} hold {clock(o.start)}–{clock(o.end)}")
@@ -86,7 +126,7 @@ def build(day: Day, edges: list[dict], budget: int):
         lo = m.new_int_var(0, 3120, f"lo_{n}")
         hi = m.new_int_var(0, 2880, f"hi_{n}")
         overlap = m.new_int_var(0, 3180, f"overlap_{n}")
-        m.add_min_equality(lo, [start[a] + acts[a].duration, start[b] + acts[b].duration])
+        m.add_min_equality(lo, [start[a] + lengths[a], start[b] + lengths[b]])
         m.add_max_equality(hi, [start[a], start[b]])
         m.add_max_equality(overlap, [0, lo - hi + day.buffer])
         hit = m.new_bool_var(f"hit_{n}")
@@ -96,8 +136,8 @@ def build(day: Day, edges: list[dict], budget: int):
         m.add(overlap <= day.threshold).only_enforce_if(hit.Not())
         m.add(stage[a] != stage[b]).only_enforce_if(diff)
         m.add(stage[a] == stage[b]).only_enforce_if(diff.Not())
-        m.add_bool_and([hit, diff]).only_enforce_if(conflict)
-        m.add_bool_or([hit.Not(), diff.Not()]).only_enforce_if(conflict.Not())
+        m.add_bool_and([hit, diff, cuts[a].Not(), cuts[b].Not()]).only_enforce_if(conflict)
+        m.add_bool_or([hit.Not(), diff.Not(), cuts[a], cuts[b]]).only_enforce_if(conflict.Not())
         src, weight = e["source"], e.get("weight", 1)
         if src == "must_see":
             terms["must_see"].append(conflict * weight)
@@ -108,18 +148,21 @@ def build(day: Day, edges: list[dict], budget: int):
             m.add(ov == 0).only_enforce_if(conflict.Not())
             terms["overlap"].append(ov)
     objectives = {
+        "cuts": sum(cuts.values()),
+        "cut_draw": sum(c * draw_of(acts[i]) for i, c in cuts.items()),
+        "trim_minutes": sum(trim_terms),
         "must_see": sum(terms["must_see"]),
         "cue_conflicts": sum(terms["cue"]),
         "moved_acts": sum(moved),
         "overlap_minutes": sum(terms["overlap"]),
         "displacement": sum(displacement),
     }
-    return m, start, stage, stage_ids, guards, objectives
+    return m, start, stage, stage_ids, lengths, cuts, decisions, guards, objectives
 
 
-def _solver(seconds):
+def _solver(seconds, workers=1):
     s = cp_model.CpSolver()
-    s.parameters.num_search_workers = 1
+    s.parameters.num_search_workers = workers
     s.parameters.random_seed = 17
     s.parameters.max_time_in_seconds = max(0.001, seconds)
     return s
@@ -151,25 +194,49 @@ def minimal_core(day, budget, labels, seconds=10):
     return keep, decided
 
 
+def read_placement(s, a, stage, stage_ids, start, lengths, cuts, day):
+    draft = next(p for p in day.draft if p.act_id == a.id)
+    if s.value(cuts[a.id]):
+        return Placement(act_id=a.id, stage_id=draft.stage_id, start=draft.start, cut=True)
+    length = s.value(lengths[a.id])
+    return Placement(
+        act_id=a.id,
+        stage_id=stage_ids[s.value(stage[a.id])],
+        start=s.value(start[a.id]),
+        length=None if length == a.duration else length,
+    )
+
+
 def solve(day: Day, edges: list[dict], budget: int = 4, seconds: float = 12, priority=None):
     priority = priority or day.repair_priority
-    m, start, stage, stage_ids, guards, obj = build(day, edges, budget)
+    m, start, stage, stage_ids, lengths, cuts, decisions, guards, obj = build(day, edges, budget)
+    rescue = day.allow_cut or day.allow_trim
+    workers = RESCUE_WORKERS if rescue else 1
     for lit in guards.values():
         m.add_assumption(lit)
     by_index = {lit.index: name for name, lit in guards.items()}
     order = ["must_see", "cue_conflicts", "moved_acts", "overlap_minutes", "displacement"]
     if priority == "least_time_shift":
         order = ["must_see", "cue_conflicts", "displacement", "moved_acts", "overlap_minutes"]
+    # A rescue plays as many sets as it can and, if a set must go, loses the smallest draw.
+    # Crowd evidence ranks after sets saved: it never costs an act its slot.
+    if day.allow_cut or any(p.cut for p in day.draft):
+        order = ["cuts", "cut_draw", *order]
+    if day.allow_trim:
+        order.insert(order.index("cue_conflicts") + 1, "trim_minutes")
     deadline = time.monotonic() + seconds
     passes, placements, all_optimal = [], None, True
-    for name in order:
+    for index, name in enumerate(order):
         expr = obj[name]
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             all_optimal = False
             break
         m.minimize(expr)
-        s = _solver(remaining)
+        # The passes people care about most may spend half of what is left; a pass that
+        # proves early hands its time on.
+        share = remaining / 2 if name in {"cuts", "cut_draw", "cue_conflicts", "trim_minutes"} else remaining / (len(order) - index)
+        s = _solver(share if rescue else remaining, workers)
         status = s.solve(m)
         label = s.status_name(status)
         if status == cp_model.INFEASIBLE:
@@ -200,22 +267,28 @@ def solve(day: Day, edges: list[dict], budget: int = 4, seconds: float = 12, pri
                 }
             all_optimal = False
             break
-        placements = [
-            Placement(act_id=a.id, stage_id=stage_ids[s.value(stage[a.id])], start=s.value(start[a.id]))
-            for a in day.acts
-        ]
+        placements = [read_placement(s, a, stage, stage_ids, start, lengths, cuts, day) for a in day.acts]
         value = s.value(expr)
         passes.append({"objective": name, "value": value, "bound": s.best_objective_bound, "status": label})
         if status != cp_model.OPTIMAL:
             all_optimal = False
-            break
+            if not rescue:
+                break
         m.add(expr == value)
+        # The next pass starts from this schedule, so it can only improve on it.
+        m.clear_hints()
+        for var in decisions:
+            if not isinstance(var, int):
+                m.add_hint(var, s.value(var))
     if placements is None:
         return {"status": "UNKNOWN", "placements": [], "passes": passes, "priority": priority, "core": [], "core_scope": "No schedule within the time limit; not a proof of infeasibility."}
     checked = audit(day, placements, edges, budget)
     if not checked["passed"]:
         raise RuntimeError("Independent schedule validation failed")
     expected = {
+        "cuts": len(checked["cuts"]),
+        "cut_draw": checked["cut_draw"],
+        "trim_minutes": checked["trim_minutes"],
         "must_see": checked["counts"]["must_see"],
         "cue_conflicts": checked["counts"]["qloo"]
         + checked["counts"]["genre"]
@@ -237,4 +310,6 @@ def solve(day: Day, edges: list[dict], budget: int = 4, seconds: float = 12, pri
         if all_optimal
         else "Best feasible result; minimum change not proven",
         "seconds": round(seconds - max(0, deadline - time.monotonic()), 3),
+        "proven": [p["objective"] for p in passes if p["status"] == "OPTIMAL"],
+        "not_proven": [p["objective"] for p in passes if p["status"] != "OPTIMAL"],
     }

@@ -1,0 +1,14 @@
+.git
+.venv
+.env
+.env.*
+.private/*
+!.private/examples
+.taste-skill
+test-results
+tests
+docs
+scripts
+**/__pycache__
+.pytest_cache
+.ruff_cache

@@ -52,5 +52,9 @@ class Config:
         self.models = ["gemma-4-31b-it", "gemini-3.5-flash-lite"]
         self.limit = min(5000, int(self.values.get("QLOO_SUCCESS_LIMIT", "5000")))
         self.prior = int(self.values.get("QLOO_PRIOR_SUCCESS", "0"))
-        self.model_limit = int(self.values.get("MODEL_CALL_LIMIT", "60"))
+        self.model_limit = int(self.values.get("MODEL_CALL_LIMIT", "500"))
         self.access_token = self.values.get("COUNTERSET_ACCESS_TOKEN", "")
+        # Public mode: open to anyone, no live Qloo spending, live agent runs capped per visitor.
+        self.public = self.values.get("COUNTERSET_PUBLIC", "").lower() in {"1", "true", "yes"}
+        self.agent_per_hour = int(self.values.get("AGENT_RUNS_PER_VISITOR_HOUR", "3"))
+        self.agent_per_day = int(self.values.get("AGENT_RUNS_PER_DAY", "40"))

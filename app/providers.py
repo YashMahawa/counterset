@@ -31,7 +31,7 @@ class Gateway:
         }
 
     def request(self, provider, path, params=None, body=None, model=None):
-        if provider == "qloo" and path not in {"/search", "/v2/insights"}:
+        if provider == "qloo" and path not in {"/search", "/v2/insights", "/v2/analysis/compare"}:
             raise ProviderError("Endpoint not permitted")
         if provider == "model" and model not in self.cfg.models:
             raise ProviderError("Model not permitted")

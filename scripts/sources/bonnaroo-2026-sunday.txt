@@ -1,0 +1,31 @@
+# Bonnaroo 2026, Sunday 14 June, main stages. Published pre-festival set times, Central time.
+# Source: festiplannr.com/festival/bonnaroo-2026/set-times, cross-checked against inmusicblog.com day schedule.
+# stage|act|start|end|outcome   (outcome from Stereogum, Pollstar and MTSU Sidelines coverage, 14-15 June 2026)
+What|Aly & AJ|14:15|15:00|cancelled
+What|Trombone Shorty|15:45|16:45|cancelled
+What|Tedeschi Trucks Band|17:30|18:30|played
+What|Role Model|19:30|20:30|played
+What|Noah Kahan|21:30|23:00|played
+Which|Little Stranger|13:15|14:00|cancelled
+Which|Spacey Jane|14:45|15:45|cancelled
+Which|Japanese Breakfast|16:30|17:30|played
+Which|Clipse|18:30|19:30|played
+Which|Kesha|20:30|21:30|played
+This|Nat Myers|12:30|13:15|cancelled
+This|Buffalo Traffic Jam|13:45|14:30|cancelled
+This|Hemlocke Springs|15:20|16:00|cancelled
+This|Fcukers|16:45|17:45|played
+This|Turnover|18:30|19:30|played
+This|Modest Mouse|20:15|21:30|played
+That|Soupless|12:30|13:00|played
+That|Girl Tones|13:30|14:15|cancelled
+That|Blondshell|15:00|15:45|cancelled
+That|Audrey Hobert|16:45|17:30|played
+That|Del Water Gap|18:30|19:30|played
+That|Mariah The Scientist|20:30|21:30|played
+Other|MOTIFV|13:45|14:45|cancelled
+Other|A Hundred Drums|15:00|16:00|cancelled
+Other|San Holo|16:15|17:15|played
+Other|Big Gigantic|17:30|18:30|played
+Other|Daily Bread|18:45|19:45|played
+Other|LSZEE|20:15|21:30|played

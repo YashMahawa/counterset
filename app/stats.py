@@ -23,8 +23,11 @@ def _clashes(slot_of, pairs, threshold, buffer):
 def random_fill(day: Day, placements, edges, samples=4000, seed=0):
     acts = {a.id: a for a in day.acts}
     pairs = [(e["a"], e["b"]) for e in edges if e["source"] in {"qloo", "genre", "listenbrainz"}]
+    placements = [p for p in placements if not p.cut]
     ids = [p.act_id for p in placements]
-    slots = [(p.stage_id, p.start, acts[p.act_id].duration) for p in placements]
+    slots = [(p.stage_id, p.start, p.length or acts[p.act_id].duration) for p in placements]
+    present = set(ids)
+    pairs = [(a, b) for a, b in pairs if a in present and b in present]
     if not pairs:
         return {"pairs": 0, "observed": 0, "samples": 0, "share_at_or_below": None, "mean": None}
     observed = _clashes(dict(zip(ids, slots)), pairs, day.threshold, day.buffer)

@@ -1,0 +1,44 @@
+# Outside Lands 2026 evening sets on the five music stages, Pacific time. Source: festiplannr.com/festival/outside-lands-2026/set-times
+# day|stage|act|start|end   Press-named clashes are listed in press_clash_test.py.
+fri|Lands End|GloRilla|17:15|18:00
+fri|Lands End|Labrinth|18:30|19:40
+fri|Lands End|Charli xcx|20:40|22:00
+fri|Twin Peaks|Tinashe|17:10|18:00
+fri|Twin Peaks|Clipse|18:45|19:35
+fri|Twin Peaks|Subtronics|20:25|21:55
+fri|Sutro|Geese|17:50|18:50
+fri|Sutro|Turnstile|19:20|20:20
+fri|Sutro|Modest Mouse|20:50|21:50
+fri|Panhandle|Goldie Boutilier|18:00|18:40
+fri|Panhandle|Dylan Brady|19:35|20:20
+fri|SOMA|KI/KI|17:25|18:55
+fri|SOMA|Odd Mob|20:25|21:55
+sat|Lands End|Lucy Dacus|16:00|16:50
+sat|Lands End|Ethel Cain|17:20|18:20
+sat|Lands End|Djo|18:50|19:50
+sat|Lands End|The Strokes|20:35|21:55
+sat|Twin Peaks|Malcolm Todd|16:45|17:45
+sat|Twin Peaks|Dijon|18:30|19:20
+sat|Twin Peaks|The xx|20:10|21:25
+sat|Sutro|Yard Act|16:20|17:05
+sat|Sutro|Snow Strippers|17:35|18:20
+sat|Sutro|it's murph|18:50|20:00
+sat|Sutro|PinkPantheress|20:45|21:45
+sat|Panhandle|Silvana Estrada|17:45|18:25
+sat|SOMA|Ben Böhmer|18:40|20:10
+sat|SOMA|Lane 8|20:25|21:55
+sun|Lands End|JADE|15:45|16:45
+sun|Lands End|Disco Lines|17:15|18:15
+sun|Lands End|Empire Of The Sun|18:45|19:45
+sun|Lands End|RÜFÜS DU SOL|20:25|21:55
+sun|Twin Peaks|kwn|17:15|18:05
+sun|Twin Peaks|Mariah the Scientist|18:50|19:50
+sun|Twin Peaks|Baby Keem|20:40|21:55
+sun|Sutro|Kingfishr|16:15|17:05
+sun|Sutro|The Temper Trap|17:35|18:25
+sun|Sutro|Not for Radio|19:05|19:55
+sun|Sutro|Death Cab for Cutie|20:25|21:40
+sun|Panhandle|Infinity Song|18:05|18:45
+sun|Panhandle|Frost Children|19:50|20:35
+sun|SOMA|Boys Noize|16:45|18:20
+sun|SOMA|Boris Brejcha|19:55|21:55

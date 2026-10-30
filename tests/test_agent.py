@@ -1,0 +1,285 @@
+"""The rescue agent: real tools, a scripted model. Nothing here calls a provider."""
+
+import json
+import time
+import pytest
+from fastapi.testclient import TestClient
+from app import desk_agent
+from app.config import Config
+from app.domain import Day
+from app.main import create_app
+from app.mcp import call
+from app.providers import ProviderError
+
+H = {"x-counterset": "workspace"}
+MESSAGE = "Lightning. Site closed 14:00 to 15:00. Hard stop 19:00. Save what you can."
+
+
+def day():
+    stages = [{"id": "a", "name": "A", "opens": 780, "closes": 1140}, {"id": "b", "name": "B", "opens": 780, "closes": 1140}]
+    acts, draft = [], []
+    for i in range(6):
+        acts.append(
+            {
+                "id": f"x{i}", "name": f"Act {i}", "duration": 60, "changeover": 0, "allowed_stages": ["a", "b"],
+                "earliest": 780, "latest": 1140, "draw": 0.1 * (i + 1), "qloo_id": None,
+            }
+        )
+        draft.append({"act_id": f"x{i}", "stage_id": "ab"[i % 2], "start": 780 + 60 * (i // 2) + 60})
+    return Day.model_validate({"name": "Mini", "grid": 5, "stages": stages, "acts": acts, "draft": draft, "auto_lock_started": False})
+
+
+EVIDENCE = {
+    "id": "fixture",
+    "fetched_at": time.time(),
+    "edges": [{"a": "x0", "b": "x1", "source": "qloo", "weight": 1, "ranks": [1, 1], "of": [5, 5]}],
+    "unknown": [],
+    "ranks": {"x0": {"x1": 1}, "x1": {"x0": 1}},
+    "explain": {"x0|x1": ["Indie", "Folk"]},
+    "status": "COMPLETE",
+}
+CONTEXT = {
+    "as_run": [
+        *[{"act_id": f"x{i}", "stage_id": "ab"[i % 2], "start": 780 + 60 * (i // 2) + 60, "cut": i < 2} for i in range(2)],
+        *[{"act_id": f"x{i}", "stage_id": "ab"[i % 2], "start": 780 + 60 * (i // 2) + 60} for i in range(2, 6)],
+    ],
+    "storm": {"start": 840, "end": 900, "curfew": 1140},
+}
+GOOD = [
+    {"thought": "Record it", "tool": "close_site", "args": {"start": "14:00", "end": "15:00", "quote": "Site closed 14:00 to 15:00."}},
+    {"thought": "Check", "tool": "audit", "args": {}},
+    {"thought": "Gentlest", "tool": "try_rescue", "args": {"curfew": None, "shortest_percent": 100, "allow_drop": False, "max_moves": None, "prefer": "fewest_acts"}},
+    {"thought": "Compare", "tool": "compare_without_qloo", "args": {"rescue_id": 0}},
+    {"thought": "Against the day", "tool": "compare_as_run", "args": {"rescue_id": 0}},
+    {"thought": "Why", "tool": "why_they_share_a_crowd", "args": {"act_a": "x0", "act_b": "x1"}},
+    {"thought": "Done", "tool": "finish", "args": {"rescue_id": 0, "summary": "Every set plays. Nothing dropped."}},
+]
+
+
+def run(decisions, context=CONTEXT):
+    return desk_agent.run(day(), EVIDENCE, context, MESSAGE, None, "m", turns=decisions, seconds=4)
+
+
+def test_agent_produces_a_validated_proposal_and_changes_nothing():
+    d = day()
+    out = run(GOOD)
+    assert [t["tool"] for t in out["trace"]] == [g["tool"] for g in GOOD]
+    assert out["session"].rescues[0]["result"]["audit"]["passed"]
+    assert not d.outages  # the saved day is untouched
+    proposal = desk_agent.to_proposal(out, d)
+    assert proposal["agent"] and proposal["day"]["outages"]
+
+
+def test_agent_quote_must_be_exact_and_unknown_tools_are_refused():
+    bad = [
+        {"tool": "close_site", "args": {"start": "14:00", "end": "15:00", "quote": "The organiser says so"}},
+        {"tool": "publish_everything", "args": {}},
+        *GOOD,
+    ]
+    out = run(bad)
+    assert not out["trace"][0]["ok"] and "exact part" in out["trace"][0]["line"]
+    assert not out["trace"][1]["ok"]
+    assert out["trace"][-1]["tool"] == "finish"
+
+
+def test_agent_cannot_finish_before_comparing_without_qloo_and_against_the_day():
+    decisions = [GOOD[0], GOOD[2], GOOD[6], GOOD[3], GOOD[6], GOOD[4], GOOD[6]]
+    out = run(decisions)
+    refused = [t for t in out["trace"] if not t["ok"]]
+    assert len(refused) == 2 and "compare_without_qloo" in refused[0]["line"] and "compare_as_run" in refused[1]["line"]
+
+
+def test_agent_summary_with_an_invented_number_is_replaced():
+    last = {**GOOD[6], "args": {"rescue_id": 0, "summary": "This sells 4000 more tickets."}}
+    out = run([*GOOD[:6], last])
+    assert out["summary_source"] == "deterministic" and "4000" not in out["summary"] and "4000" in out["summary_rejected"]
+
+
+def test_agent_may_not_extend_past_the_stated_hard_stop():
+    over = {"tool": "try_rescue", "args": {"curfew": "20:00", "shortest_percent": 100, "allow_drop": False}}
+    out = run([GOOD[0], over, *GOOD[2:]])
+    assert not out["trace"][1]["ok"] and "hard stop" in out["trace"][1]["line"]
+
+
+def test_agent_stops_cleanly_after_repeated_bad_calls():
+    with pytest.raises(desk_agent.AgentStop):
+        run([{"tool": "nope", "args": {}}] * 3)
+
+
+def ready(tmp_path, public=False, recorded=False):
+    cfg = Config(root=tmp_path)
+    cfg.private = tmp_path
+    cfg.model_key = "fake"
+    cfg.qloo_key = None
+    cfg.public = public
+    cfg.agent_per_hour = 1
+    (tmp_path / "web").mkdir(exist_ok=True)
+    (tmp_path / "examples").mkdir(exist_ok=True)
+    context = {**CONTEXT, "kind": "replay", "title": "Mini", "summary": "s", "order": 0}
+    if recorded:
+        context["recorded_run"] = {"model": "m", "at": time.time(), "message": MESSAGE, "decisions": GOOD}
+    context["rescue_table"] = {"rows": []}
+    (tmp_path / "examples/mini.json").write_text(json.dumps({"day": day().model_dump(), "evidence": EVIDENCE, "context": context}))
+    app = create_app(cfg)
+    return TestClient(app), app, cfg
+
+
+def finish(c, job_id):
+    for _ in range(800):
+        j = c.get("/api/jobs/" + job_id).json()
+        if j["status"] != "RUNNING":
+            return j
+        time.sleep(0.02)
+    raise AssertionError("Job did not finish")
+
+
+def test_recorded_replay_reruns_tools_then_a_person_approves(tmp_path):
+    c, app, cfg = ready(tmp_path, recorded=True)
+    p = c.post("/api/examples/mini", headers=H).json()
+    start = c.post(f"/api/projects/{p['id']}/agent", headers=H, json={"version": 1, "text": MESSAGE, "mode": "replay"})
+    assert start.status_code == 200, start.text
+    j = finish(c, start.json()["job_id"])
+    assert j["status"] == "COMPLETED", j
+    assert len(j["trace"]) == len(GOOD)
+    # Nothing has changed until approval.
+    before = c.get(f"/api/projects/{p['id']}").json()
+    assert before["version"] == 1 and not before["day"]["outages"]
+    pub = c.post(f"/api/projects/{p['id']}/publish", headers=H, json={"version": 1, "proposal_id": j["result"]["proposal_id"], "option": 0})
+    assert pub.status_code == 200, pub.text
+    after = c.get(f"/api/projects/{p['id']}").json()
+    assert after["version"] == 2 and after["day"]["outages"] and after["audit"]["passed"]
+    assert after["day"]["allow_cut"] is False and after["day"]["allow_trim"] is False
+
+
+def test_recording_refuses_a_changed_message_or_day(tmp_path):
+    c, app, cfg = ready(tmp_path, recorded=True)
+    p = c.post("/api/examples/mini", headers=H).json()
+    r = c.post(f"/api/projects/{p['id']}/agent", headers=H, json={"version": 1, "text": "Something else", "mode": "replay"})
+    assert r.status_code == 409
+
+
+def test_live_failure_applies_nothing_and_says_so(tmp_path, monkeypatch):
+    c, app, cfg = ready(tmp_path)
+    p = c.post("/api/examples/mini", headers=H).json()
+
+    def down(*a, **k):
+        raise ProviderError("model returned HTTP 503; no action applied")
+
+    monkeypatch.setattr(app.state.gateway, "model", down)
+    start = c.post(f"/api/projects/{p['id']}/agent", headers=H, json={"version": 1, "text": MESSAGE, "mode": "live"}).json()
+    j = finish(c, start["job_id"])
+    assert j["status"] == "FAILED" and "503" in j["error"]
+    assert c.get(f"/api/projects/{p['id']}").json()["version"] == 1
+
+
+def test_public_mode_hides_workspaces_blocks_live_qloo_and_caps_agent(tmp_path, monkeypatch):
+    c, app, cfg = ready(tmp_path, public=True)
+    p = c.post("/api/examples/mini", headers=H).json()
+    assert c.get("/api/projects").json() == []
+    assert c.post("/api/resolve", headers=H, json={"query": "x"}).status_code == 403
+    assert c.post(f"/api/projects/{p['id']}/evidence", headers=H, json={"version": 1, "source": "live"}).status_code == 403
+    monkeypatch.setattr(app.state.gateway, "model", lambda *a, **k: (_ for _ in ()).throw(ProviderError("down")))
+    first = c.post(f"/api/projects/{p['id']}/agent", headers=H, json={"version": 1, "text": MESSAGE, "mode": "live"})
+    assert first.status_code == 200
+    assert finish(c, first.json()["job_id"])["status"] == "FAILED"
+    second = c.post(f"/api/projects/{p['id']}/agent", headers=H, json={"version": 1, "text": MESSAGE, "mode": "live"})
+    assert second.status_code == 429
+
+
+def test_rescue_terms_through_the_repair_endpoint_can_be_approved(tmp_path):
+    c, app, cfg = ready(tmp_path)
+    p = c.post("/api/examples/mini", headers=H).json()
+    body = {"version": 1, "move_budget": 6, "seconds": 3, "scenario": {"curfew": 1140, "shortest": 75, "allow_cut": True}}
+    j = finish(c, c.post(f"/api/projects/{p['id']}/repair", headers=H, json=body).json()["job_id"])
+    assert j["status"] == "COMPLETED", j
+    assert j["result"]["scenario"]["shortest"] == 75
+    pub = c.post(f"/api/projects/{p['id']}/publish", headers=H, json={"version": 1, "proposal_id": j["result"]["proposal_id"], "option": 0})
+    assert pub.status_code == 200, pub.text
+
+
+def test_rescue_terms_can_replay_the_recorded_closure(tmp_path):
+    c, app, cfg = ready(tmp_path)
+    p = c.post("/api/examples/mini", headers=H).json()
+    body = {"version": 1, "move_budget": 6, "seconds": 3, "scenario": {"curfew": 1140, "shortest": 75, "allow_cut": True, "close_site": True}}
+    j = finish(c, c.post(f"/api/projects/{p['id']}/repair", headers=H, json=body).json()["job_id"])
+    assert j["status"] == "COMPLETED", j
+    held = j["result"]["day"]["outages"]
+    assert {(o["stage_id"], o["start"], o["end"]) for o in held} == {("a", 840, 900), ("b", 840, 900)}
+    option = next(o for o in j["result"]["options"] if o.get("placements"))
+    for place in option["placements"]:
+        assert place["cut"] or place["start"] >= 900 or place["start"] + (place["length"] or 60) <= 840
+    # The closure lives on the proposal until a person approves it.
+    assert c.get(f"/api/projects/{p['id']}").json()["day"]["outages"] == []
+    pub = c.post(f"/api/projects/{p['id']}/publish", headers=H, json={"version": 1, "proposal_id": j["result"]["proposal_id"], "option": 0})
+    assert pub.status_code == 200, pub.text
+    assert len(c.get(f"/api/projects/{p['id']}").json()["day"]["outages"]) == 2
+
+
+def test_closing_the_site_needs_a_recorded_closure(tmp_path):
+    c, app, cfg = ready(tmp_path)
+    p = c.post("/api/examples/mini", headers=H).json()
+    state = app.state.store.get("project", p["id"])
+    state["context"].pop("storm")
+    app.state.store.put("project", state, p["id"])
+    body = {"version": 1, "scenario": {"close_site": True}}
+    assert c.post(f"/api/projects/{p['id']}/repair", headers=H, json=body).status_code == 422
+
+
+def test_an_earlier_finish_time_really_applies(tmp_path):
+    from app.repair import apply_scenario
+
+    earlier = apply_scenario(day(), {"curfew": 1080, "allow_cut": True})
+    assert {s.closes for s in earlier.stages} == {1080}
+    with pytest.raises(ValueError, match="before the stages open"):
+        apply_scenario(day(), {"curfew": 600})
+
+
+def test_csv_gives_a_dropped_set_no_slot_and_marks_only_real_changes(tmp_path):
+    import csv
+    import io
+
+    c, app, cfg = ready(tmp_path)
+    p = c.post("/api/examples/mini", headers=H).json()
+    body = {"version": 1, "move_budget": 6, "seconds": 3, "scenario": {"curfew": 900, "allow_cut": True}}
+    j = finish(c, c.post(f"/api/projects/{p['id']}/repair", headers=H, json=body).json()["job_id"])
+    assert j["status"] == "COMPLETED", j
+    option = j["result"]["options"][0]
+    assert option["audit"]["cuts"], "the earlier finish should force a drop"
+    pub = c.post(f"/api/projects/{p['id']}/publish", headers=H, json={"version": 1, "proposal_id": j["result"]["proposal_id"], "option": 0})
+    assert pub.status_code == 200, pub.text
+    text = c.get("/api/published/" + pub.json()["published_id"] + "/export?format=csv").text
+    rows = list(csv.DictReader(io.StringIO(text)))
+    assert len(rows) == 6
+    for row in rows:
+        if row["status"] == "dropped":
+            assert row["stage"] == row["start"] == row["end"] == "" and row["previous_start"]
+        else:
+            assert row["stage"] and row["start"] and row["end"]
+    changed = {r["act_id"] for r in rows if r["changed"]}
+    assert changed == set(option["audit"]["moved"]) | set(option["audit"]["cuts"]) | set(option["audit"]["trimmed"])
+
+
+def test_mcp_lists_audits_rescues_and_explains(tmp_path):
+    c, app, cfg = ready(tmp_path)
+    init = c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).json()
+    assert init["result"]["serverInfo"]["name"] == "counterset"
+    tools = c.post("/mcp", json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"}).json()["result"]["tools"]
+    assert {t["name"] for t in tools} == {"list_days", "audit_day", "rescue_day", "why_share_a_crowd"}
+
+    def tool(name, **args):
+        r = c.post("/mcp", json={"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": name, "arguments": args}}).json()["result"]
+        return r, json.loads(r["content"][0]["text"]) if not r["isError"] else None
+
+    assert tool("list_days")[1][0]["id"] == "mini"
+    assert "clashes" in tool("audit_day", day_id="mini")[1]
+    out = tool("rescue_day", day_id="mini", closed_from=840, closed_until=900, allow_drop=True, shortest_percent=75, curfew=1140)[1]
+    assert out["sets_total"] == 6 and "what_really_happened" in out
+    assert tool("why_share_a_crowd", day_id="mini", act_a="Act 0", act_b="Act 1")[1]["shared_tags"] == ["Indie", "Folk"]
+    assert tool("rescue_day", day_id="mini", closed_from=900, closed_until=840)[0]["isError"]
+    assert tool("audit_day", day_id="missing")[0]["isError"]
+
+
+def test_a_text_false_does_not_open_dropping_sets():
+    text = {"tool": "try_rescue", "args": {"curfew": None, "shortest_percent": "100", "allow_drop": "false", "max_moves": None}}
+    out = run([GOOD[0], text, *GOOD[2:]])
+    assert out["session"].rescues[0]["scenario"]["allow_cut"] is False

@@ -1,98 +1,115 @@
-# Validation, 25 October 2026
+# Validation, 30 October 2026
 
 Three separate questions, answered separately:
 
-1. **Does the software do what it says?** Tests, real browser runs, live provider checks. This page.
-2. **Is Qloo good evidence for the decision?** Coverage, agreement with open data, sensitivity. See [evaluation](EVALUATION.md).
-3. **Does it help programmers or fans?** Not yet measured. See [evaluation](EVALUATION.md).
+1. **Does the software do what it says?** Tests, offline recounts, browser runs and provider logs. This page.
+2. **Is Qloo good evidence for the decision?** See [evaluation](EVALUATION.md).
+3. **Does it help programmers or fans?** Not measured. See [evaluation](EVALUATION.md).
 
-## Backend: 28 tests pass
+## Backend: 53 tests pass
 
-`pytest -q` covers:
+`.venv/bin/python -m pytest -q` reports `53 passed, 1 warning`. The warning is an upstream Starlette/httpx deprecation and does not affect results.
 
-- **Evidence:** the coverage gate (missing, duplicate, self, non-finite, extra), rank ties widening a cutoff, incomplete rows becoming unknown, a failed order check disabling cues, cross-kind ranks staying inside their own response, the quarter-of-the-kind cap.
-- **Solver:** exhaustive comparison on small instances for both preferences, attendee priority, locks, zero move budget, the intentional-pair exclusion, the cautious unknown policy, buffer and hold recounts. An infeasible window is reduced to exactly the one conflicting rule.
-- **Repair:** a deterministic counterfactual in which the blind repair leaves a named pair clashing and the evidence-aware repair keeps it apart, plus identical options collapsing.
-- **Audit:** the random-fill share is deterministic and bounded.
-- **API:**
-  - repair options and publication;
-  - stale proposals refused after publication or after an identity change;
-  - stale evidence (older than 14 days) blocks publishing;
-  - same-origin and version checks;
-  - cache-only evidence with no rows fails visibly and changes nothing;
-  - message items stay pending until reviewed, with bad items rejected by the controller (an unknown act, and an injected "publish" instruction ignored);
-  - re-review is refused;
-  - a provider 503 applies nothing;
-  - briefing numbers not in the computed facts are rejected;
-  - an infeasible day returns a reduced set of conflicting rules and nothing publishable;
-  - private examples load only by safe id.
-- **Providers:** no paid-key fallback, retry on 500 without switching model, offline cache mode never calls the network, malformed or ambiguous constraint times rejected, after-midnight times roll forward.
-
-One upstream Starlette/httpx deprecation warning is emitted and does not affect results.
-
-## Browser: real clicks, desktop and phone
-
-`scripts/browser_test.cjs` opens a fresh copy of the Lollapalooza example and clicks through all six steps:
-
-1. review the bill;
-2. load evidence and open a pair;
-3. audit;
-4. add a stage hold through the dialog, or with `COUNTERSET_MODEL=1` read the message with Gemma and apply the ticked items;
-5. find repairs and switch to "A without Qloo";
-6. approve option A as v1.
-
-| Width | Motion | Result |
-| --- | --- | --- |
-| 1440 | normal | passed, no page errors, no horizontal overflow, bundled font loaded |
-| 390 | normal | passed, no page errors, no horizontal overflow |
-| 1440 | reduced motion | passed |
-| 1440 | normal, real Gemma | passed: Gemma read the message |
-
-Gemma proposed three items from the message:
-
-- Bacardi on hold 17:15–18:15;
-- Ethel Cain starts no earlier than 18:00;
-- "Please don't touch anything that has already started", returned as unsupported for a person.
-
-All three carried exact quotes.
-
-After the redesign the walkthrough passed again at 1440, 390 and with reduced motion. The taste-skill inspector reports 0 failures for the studio (app rules) and the public page at 1440, 768 and 390; see [design review](DESIGN_REVIEW.md).
-
-## Live providers (this build)
-
-**Qloo:** 165 new successful calls (cumulative 407 of 5,000, including about 242 before this build). No failed Qloo request. Calls were spaced at least 13 seconds apart and every response was cached privately.
-
-| Purpose | Calls |
+| File | Tests |
 | --- | ---: |
-| Cross-kind probe: 4 comedian searches, 1 podcast search, artist→person, person→artist, person→person, artist→podcast | 9 |
-| Lollapalooza identity searches | 42 |
-| Lollapalooza exact-bill rows and order control | 33 |
-| Multi-arts rehearsal searches, rows and control | about 76 |
-| Extra reversed-order controls | 5 |
+| `tests/test_agent.py` | 17 |
+| `tests/test_engine.py` | 21, of which 8 cover rescues |
+| `tests/test_api.py` | 10 |
+| `tests/test_providers.py` | 5 |
 
-**What the probe and rows showed:**
+### The rescue agent (`tests/test_agent.py`)
 
-- Comedian↔musician and artist→podcast rows return complete, finite scores.
-- Every Lollapalooza row passed the gate.
-- All six reversed-order controls (one in the snapshot plus five extra) returned identical scores (maximum difference 0.0).
-- The multi-arts rehearsal is complete (20 of 20 rows).
+Real tools with a scripted model. Nothing in this file calls a provider.
 
-**Models:** 12 attempts in total, 6 of them in this build, all with high thinking on the free project key:
+- **Proposal only:** a run produces a validated proposal and leaves the saved day untouched. Nothing changes until a person approves, including a closure, which stays on the proposal until then.
+- **Refusals:** a quote that is not an exact part of the message; an unknown tool; finishing before both comparisons have run; extending past the message's hard stop; closing the site on a day with no recorded closure.
+- **Invented numbers:** a summary with a number not in the tool results is replaced by a computed one, and the rejected text is kept.
+- **Bad calls:** three in a row stop the run. A text `"false"` does not open dropping sets.
+- **Replay:** recorded decisions re-run every tool, then a person approves and a new version is saved. A changed message is refused.
+- **Failure:** a provider 503 fails the job visibly and applies nothing.
+- **Public mode:** workspaces are hidden, live Qloo is blocked and the agent is rate-capped.
+- **Rescue terms:** they work through the repair endpoint and can be approved. An earlier finish time really applies, and one before the stages open is refused.
+- **Export:** in the CSV a dropped set has no slot, and only real changes are marked.
+- **MCP:** all four tools list and run, and bad input returns an error.
 
-- **Gemma 4 31B** read the message successfully after two HTTP 500 retries, all logged.
-- **Gemini 3.5 Flash Lite** produced:
-  - a briefing that passed the number check;
-  - one LLM-only schedule that stopped with an incomplete response at the old 12,288-token limit (reported as a failure);
-  - after the limit was raised, a complete LLM-only schedule that passed every hard rule.
+### Rescues in the solver (`tests/test_engine.py`)
+
+- Shortening every set is preferred to dropping one, with the expected minutes.
+- A set is dropped only when the shortest allowed sets still do not fit.
+- Without permission to drop, the result is a reported conflict and no silent cut.
+- The validator refuses unapproved drops, unapproved shortening, and lengths below what the act accepts.
+- A headliner is never shortened or dropped.
+- Dropped sets and shortened minutes match a brute-force search of every start, length and drop combination on a small day. The brute force is scored by the validator alone.
+- A dropped set can never count as shortened minutes.
+- Scenario terms do not touch the saved day.
+
+### Everything else
+
+- **Evidence:** the coverage gate, rank ties widening a cutoff, incomplete rows becoming unknown, a failed order check disabling pairs, cross-kind ranks staying inside their own response, the quarter-of-the-kind cap.
+- **Solver:** exhaustive comparison on small instances for both preferences, attendee priority, locks, zero move budget, the intentional-pair exclusion, the cautious unknown policy, buffer and hold recounts, and reduction of an infeasible window to the rule in conflict.
+- **Repair and audit:** a counterfactual in which the blind repair leaves a named pair clashing; a deterministic, bounded random-fill share.
+- **API:** publication, stale proposals, stale evidence, same-origin and version checks, cache-only evidence failing visibly, message items pending until reviewed, a provider 503 applying nothing, briefing numbers checked against computed facts, infeasible days returning conflicting rules, safe example ids.
+- **Providers:** no paid-key fallback, retry without switching model, offline cache mode never calling the network, malformed times rejected, after-midnight times rolling forward.
+
+## Offline checks of the Bonnaroo replay
+
+Run on 30 October against the stored example, with no Qloo or model call.
+
+| Check | Result |
+| --- | --- |
+| Each of the 15 stored rows recounted by the validator under its own terms | All 15 pass, and the counts match |
+| As-run grid under the closure, midnight curfew and drops allowed | No errors. 11 cancelled, 1 clash, 16 overlaps unknown |
+| Full length no drops, and 75% no drops | Both `INFEASIBLE`, with the conflict named |
+| Six replays of the recorded decisions, 10 seconds per solve, three on each side of a solver change | All finish in about 50 seconds and refuse no step. 24, 25, 27 and 27 of 28 each time |
+| Summary check on those replays | Before the change, all three kept the model's summary. After it, all three replaced it with a computed one, because the recording says 13 sets shortened and the rerun shortens 12 |
+
+The recording and the stored table were then rebuilt on the final solver. Details and meaning are in [evaluation](EVALUATION.md#the-agents-recorded-run).
+
+## Browser
+
+Final run on 30 October, on the final solver and recording: 32 of 32 checks pass, 16 at each width. The Dockerfile has not been built, because Docker is not installed on the build machine.
+
+`scripts/browser_test.cjs` drives real clicks at 1440 and 390 wide. It needs a running server, Playwright on `NODE_PATH` and Chrome at `CHROME_PATH`, and it uses recorded decisions with no model. It covers:
+
+- the public page: terms change the count, "what really happened" shows 17, the stage steps respond, and there is no sideways scroll;
+- the desk: the agent's steps appear and finish, nothing changes before approval, the as-run view shows 11 cancelled sets, the without-Qloo view opens, and approval publishes a version;
+- the CSV export, an ordinary repair on another day, and no console or page errors.
+
+**Result on this build: NOT RECORDED HERE. To be filled in from a real run of `scripts/browser_test.cjs` on the final build.**
+
+Earlier walkthroughs passed on previous designs. They say nothing about this page.
+
+## Live providers
+
+Counts from the private call log for 30 October, after the press test finished. Every call returned HTTP 200.
+
+| Provider | Endpoint or model | Calls |
+| --- | --- | ---: |
+| Qloo | `/search` | 70 |
+| Qloo | `/v2/insights` | 57 |
+| Qloo | `/v2/analysis/compare` | 17 |
+| Model | `gemini-3.5-flash-lite` | 60 |
+
+That is 144 Qloo calls, including the Outside Lands press test and the Bonnaroo build. With the 407 of 5,000 recorded here on 25 October, this page's running count is 551. Calls are spaced at least 13 seconds apart, and responses are cached privately. The recorded agent run accounts for 12 of the model calls and 52,247 tokens.
+
+**The press test hit one data gap:** Qloo returned no usable affinity for RÜFÜS DU SOL, so the completeness gate rejected all 12 Sunday rows and reported those pairs as not tested. The gate worked as designed. See [evaluation](EVALUATION.md#press-clash-test-outside-lands-2026).
+
+**Earlier, on 25 October:**
+
+- All six reversed-order controls returned identical scores on Lollapalooza. The Bonnaroo order control also passes.
+- Comedian↔musician and artist→podcast rows returned complete, finite scores.
+- Gemma 4 31B read a production message after two HTTP 500 retries, all logged. Its three items carried exact quotes, and one was returned as unsupported for a person to judge.
+- One LLM-only schedule stopped at the old token limit and was reported as a failure. After the limit was raised, a complete one passed every hard rule.
 
 No paid key, no other model and no fabricated result was used.
 
 ## Bugs found and fixed during validation
 
-- Curfew was required to fit the closing set's changeover, which flagged every headliner as invalid. Now curfew binds the set's end only.
+- Curfew was required to fit the closing set's changeover, which flagged every headliner as invalid. Curfew now binds the set's end only.
 - A set starting exactly when a hold began was treated as already started and locked. Now only sets that began before the hold are locked.
-- Infeasibility cores were OR-Tools' unreduced assumption sets (75 rules). They are now reduced by deletion to the rules that conflict.
-- The hold block animated diagonally because its animation overrode its position transform. Holds are now positioned with left/top.
+- Infeasibility cores were OR-Tools' unreduced assumption sets. They are now reduced by deletion to the rules that conflict.
+- An earlier finish time did not apply because stage hours could only extend. It now applies, and one before the stages open is refused.
+- A model sending `"false"` as text could have opened dropping sets. Only a real yes opens it now.
 - The strict CSP blocked inline style attributes. Geometry is now applied through the CSSOM, and the CSP was kept.
 - The LLM-only comparison failed at the token limit. The limit was raised, and incomplete responses now report their finish reason.
 
