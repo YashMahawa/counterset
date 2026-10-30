@@ -283,3 +283,13 @@ def test_a_text_false_does_not_open_dropping_sets():
     text = {"tool": "try_rescue", "args": {"curfew": None, "shortest_percent": "100", "allow_drop": "false", "max_moves": None}}
     out = run([GOOD[0], text, *GOOD[2:]])
     assert out["session"].rescues[0]["scenario"]["allow_cut"] is False
+
+
+def test_unlisted_mode_asks_crawlers_to_stay_out(tmp_path):
+    cfg = Config(root=tmp_path)
+    cfg.private = tmp_path
+    cfg.unlisted = True
+    (tmp_path / "web").mkdir(exist_ok=True)
+    c = TestClient(create_app(cfg))
+    assert c.get("/api/config").headers["x-robots-tag"].startswith("noindex")
+    assert "Disallow: /" in c.get("/robots.txt").text.splitlines()

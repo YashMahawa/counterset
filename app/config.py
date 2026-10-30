@@ -56,5 +56,7 @@ class Config:
         self.access_token = self.values.get("COUNTERSET_ACCESS_TOKEN", "")
         # Public mode: open to anyone, no live Qloo spending, live agent runs capped per visitor.
         self.public = self.values.get("COUNTERSET_PUBLIC", "").lower() in {"1", "true", "yes"}
+        # Unlisted: reachable by link, but asks search engines and AI crawlers to stay out.
+        self.unlisted = self.values.get("COUNTERSET_UNLISTED", "").lower() in {"1", "true", "yes"}
         self.agent_per_hour = int(self.values.get("AGENT_RUNS_PER_VISITOR_HOUR", "3"))
         self.agent_per_day = int(self.values.get("AGENT_RUNS_PER_DAY", "40"))

@@ -16,7 +16,7 @@ const LABEL = 54;
 function geometry() {
   const width = Math.max(960, $(".board-wrap").clientWidth);
   const from = 12 * 60;
-  const to = Math.max(...table.curfews) + 5;
+  const to = Math.max(...table.curfews) + 30;
   return { width, from, to, ppm: (width - LABEL) / (to - from) };
 }
 function drawBase() {
@@ -76,6 +76,7 @@ function draw() {
     el.classList.toggle("out", !!p.cut);
     el.classList.toggle("back", !p.cut && cancelled.has(a.id));
     el.classList.toggle("short", !p.cut && length !== a.duration);
+    el.classList.toggle("tiny", !p.cut && length * g.ppm < 66);
     el.title = p.cut ? `${a.name}: not playing` : `${a.name}, ${tm(p.start)}–${tm(p.start + length)}${length !== a.duration ? `, ${length} of ${a.duration} minutes` : ""}`;
   }
   const big = $(".big");
@@ -84,29 +85,25 @@ function draw() {
     $("#saved").textContent = table.acts.length - table.as_run.cancelled.length;
     $("#saved-of").textContent = `of ${table.acts.length} sets played on the day, and ${table.as_run.cancelled.length} were cancelled`;
     const c = table.as_run.clashes.length;
-    $("#costs").textContent = `Most other sets moved back an hour. The day finished at midnight, with ${plural(c, "shared-crowd clash", "shared-crowd clashes")}. Reconstructed from press reports.`;
+    $("#costs").textContent = `Most other sets moved back an hour, and the day finished at midnight. Acts that share a crowd left playing at once: ${c}. Rebuilt from press reports.`;
   } else {
     $("#saved").textContent = row.played;
     $("#saved-of").textContent = `of ${row.total} sets could play. ${row.total - table.as_run.cancelled.length} did on the day.`;
-    const costs = [
-      `${row.saved} of the ${table.as_run.cancelled.length} cancelled sets come back`,
-      row.minutes_shortened ? `${row.minutes_shortened} minutes shortened across ${plural(row.sets_shortened, "set")}` : "every set at full length",
-      `${plural(row.moved, "set")} moved`,
-      `${plural(row.clashes.length, "shared-crowd clash", "shared-crowd clashes")}`,
-    ];
-    const drop = row.dropped.length ? ` Not playing: ${row.dropped.join(", ")}.` : " Every set plays.";
-    $("#costs").textContent = `${costs.join(", ")}.${drop}`;
+    const drop = row.dropped.length ? `Not playing: ${row.dropped.join(", ")}.` : "Every set plays.";
+    const cost = row.minutes_shortened ? `It costs ${row.minutes_shortened} minutes of music across ${plural(row.sets_shortened, "set")}, and ${plural(row.moved, "set")} move.` : `Every set stays full length, and ${plural(row.moved, "set")} move.`;
+    $("#costs").textContent = `${row.saved} of the ${table.as_run.cancelled.length} cancelled sets come back. ${cost} ${drop} Acts that share a crowd left playing at once: ${row.clashes.length}.`;
   }
   document.querySelectorAll("#curfew button,#shortest button").forEach((b) => {
     const on = !state.real && +b.dataset.value === (b.parentElement.id === "curfew" ? state.curfew : state.shortest);
     b.setAttribute("aria-pressed", String(on));
   });
   $("#asrun").setAttribute("aria-pressed", String(state.real));
-  $("#asrun").textContent = state.real ? "Back to the terms" : "Show what really happened";
+  $("#yours").setAttribute("aria-pressed", String(!state.real));
+  $("#choices").classList.toggle("off", state.real);
 }
 function controls() {
   $("#curfew").innerHTML = table.curfews.map((c) => `<button type="button" data-value="${c}">${tm(c)}</button>`).join("");
-  $("#shortest").innerHTML = table.shortest.map((v) => `<button type="button" data-value="${v}">${v === 100 ? "Full" : v + "%"}</button>`).join("");
+  $("#shortest").innerHTML = table.shortest.map((v) => `<button type="button" data-value="${v}">${v === 100 ? "Full length" : v + "% of its time"}</button>`).join("");
   $("#curfew").onclick = (e) => {
     const b = e.target.closest("button");
     if (!b) return;
@@ -122,7 +119,11 @@ function controls() {
     draw();
   };
   $("#asrun").onclick = () => {
-    state.real = !state.real;
+    state.real = true;
+    draw();
+  };
+  $("#yours").onclick = () => {
+    state.real = false;
     draw();
   };
 }
@@ -215,7 +216,6 @@ function stage(i) {
     frag.innerHTML = s.frag();
     frag.classList.remove("swap");
   }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 200);
-  $("#stage-range").value = i;
   document.querySelectorAll("#stage-names button").forEach((b, n) => b.setAttribute("aria-current", n === i ? "step" : "false"));
 }
 function startStages() {
@@ -224,7 +224,6 @@ function startStages() {
     const b = e.target.closest("button");
     if (b) stage(+b.dataset.i);
   };
-  $("#stage-range").oninput = (e) => stage(+e.target.value);
   stage(0);
 }
 

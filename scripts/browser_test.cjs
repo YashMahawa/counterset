@@ -35,8 +35,9 @@ const check = (name, ok, more = "") => {
     check("public page: gentler terms cannot play more sets", at75 >= atFull, `${atFull} full, ${at75} at 75%`);
     await page.click("#asrun");
     check("public page: what really happened shows 17", (await page.textContent("#saved")).trim() === "17");
-    await page.click("#asrun");
-    await page.evaluate(() => document.querySelector("#stage-range").scrollIntoView());
+    await page.click("#yours");
+    check("public page: back to your choices", (await page.textContent("#saved")).trim() === String(atFull));
+    await page.evaluate(() => document.querySelector("#stage-names").scrollIntoView());
     await page.click('#stage-names button[data-i="2"]');
     await page.waitForTimeout(300);
     check("public page: stepping the agent changes the clause", (await page.textContent("#stage-clause")).includes("checks"));

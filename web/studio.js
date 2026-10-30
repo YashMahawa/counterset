@@ -994,6 +994,7 @@ function render() {
   const last = p.versions.at(-1);
   const state = p.status === "PUBLISHED" && last ? `v${last.number} published` : last ? `draft, changed since v${last.number}` : "draft";
   $("#day-meta").textContent = `${day().acts.length} acts · ${day().stages.length} stages · ${state}`;
+  document.body.dataset.public = S.config.public ? "yes" : "no";
   $("#budget-stamp").textContent = S.config.public ? "Recorded Qloo rows" : `Qloo ${S.config.budget.qloo_successes.toLocaleString()} of ${S.config.budget.qloo_limit.toLocaleString()} calls`;
   $("#context").textContent = p.context?.note || "";
   renderStep();

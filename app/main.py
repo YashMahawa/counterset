@@ -161,6 +161,14 @@ def create_app(config=None):
                     return Response("Cross-origin mutation refused", status_code=403)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
+        # A proxy in front must not inject analytics into pages: visitors are not tracked.
+        if not request.url.path.startswith(("/api/", "/web/", "/mcp")):
+            response.headers["Cache-Control"] = "no-cache, no-transform"
+        # Code and styles revalidate, so a proxy never serves an old look after an update.
+        elif request.url.path.endswith((".css", ".js")):
+            response.headers["Cache-Control"] = "no-cache"
+        if cfg.unlisted:
+            response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
@@ -750,7 +758,12 @@ def create_app(config=None):
     def job(id):
         return store.get("job", id)
 
-    @app.get("/")
+    @app.get("/robots.txt")
+    def robots():
+        rule = "Disallow: /" if cfg.unlisted else "Disallow: /api/"
+        return Response(f"User-agent: *\n{rule}\n", media_type="text/plain")
+
+    @app.api_route("/", methods=["GET", "HEAD"])
     def landing():
         return FileResponse(cfg.root / "web/index.html")
 

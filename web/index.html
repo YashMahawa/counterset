@@ -7,14 +7,14 @@
     <title>Counterset — the rescue desk for festival days</title>
     <link rel="icon" href="/web/assets/icon.svg" type="image/svg+xml" />
     <link rel="preload" href="/web/assets/albert-sans.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/web/landing.css" />
-    <script src="/web/landing.js" defer></script>
+    <link rel="stylesheet" href="/web/landing.css?v=3" />
+    <script src="/web/landing.js?v=3" defer></script>
   </head>
   <body>
     <header class="bar" id="bar">
       <a class="word" href="/">Counterset</a>
       <nav aria-label="Page">
-        <a href="#replay">The replay</a>
+        <a href="#replay">Try it</a>
         <a href="#agent">The agent</a>
         <a href="#qloo">Why Qloo</a>
         <a href="#questions">Questions</a>
@@ -28,7 +28,7 @@
         <div class="storm-foot">
           <div class="storm-action">
             <a class="button" href="/studio?day=bonnaroo-2026-sunday&amp;watch=1">Watch the agent rebuild that day</a>
-            <a class="text" href="#replay">Or try it yourself</a>
+            <a class="text" href="#replay">Or try the choices yourself</a>
           </div>
           <p class="storm-say">Bonnaroo, 14 June 2026. Counterset is a rescue agent for festival programmers. It rebuilds a broken day around what fans share, using Qloo, and a person approves.</p>
         </div>
@@ -36,25 +36,35 @@
 
       <section class="field night" id="replay" data-ink="light" aria-labelledby="replay-title">
         <div class="replay-top">
-          <h2 id="replay-title">How many could have played?</h2>
-          <p>This is the real published timetable and the real closure. Change the terms and the solver's answer changes with them.</p>
+          <h2 id="replay-title">Try it: could more sets have played?</h2>
+          <p>This is the real timetable from that Sunday, closed from 13:00 to 17:15. Make the two choices below, and the solver rebuilds the day.</p>
         </div>
         <div class="replay" id="live" data-ui>
-          <div class="controls">
+          <div class="switch" role="group" aria-label="Which day to show">
+            <button id="yours" type="button" aria-pressed="true">Your choices</button>
+            <button id="asrun" type="button" aria-pressed="false">What really happened</button>
+          </div>
+          <div class="controls" id="choices">
             <fieldset>
-              <legend>Last set ends by</legend>
+              <legend>What time must the last set end?</legend>
               <div class="seg" id="curfew"></div>
             </fieldset>
             <fieldset>
-              <legend>Sets may shrink to</legend>
+              <legend>How short can a set get?</legend>
               <div class="seg" id="shortest"></div>
             </fieldset>
-            <button class="ran" id="asrun" type="button" aria-pressed="false">Show what really happened</button>
           </div>
           <div class="readout" aria-live="polite">
             <p class="big"><strong id="saved">27</strong> <span id="saved-of">of 28 sets could play. 17 did on the day.</span></p>
-            <p id="costs" class="costs">Choose terms to see what they cost.</p>
+            <p id="costs" class="costs">Choose above to see what it costs.</p>
           </div>
+          <ul class="key" aria-label="What the colours mean">
+            <li><i class="k-back"></i>Cancelled on the day, plays here</li>
+            <li><i class="k-kept"></i>Played on the day too</li>
+            <li><i class="k-short"></i>Shortened</li>
+            <li><i class="k-out"></i>Not playing</li>
+            <li><i class="k-closed"></i>Site closed</li>
+          </ul>
           <div class="board-wrap"><div class="board" id="board" role="img" aria-label="The Bonnaroo Sunday timetable under the chosen terms"></div></div>
           <p class="fallback" id="fallback">With a midnight finish and sets shortened to 75%, 27 of 28 sets could have played, against 17 on the day. Open the studio to run it.</p>
         </div>
@@ -77,15 +87,14 @@
         </div>
         <div class="stage-ui" data-ui><div id="stage-frag" class="frag"></div></div>
         <div class="stage-rail">
-          <input id="stage-range" type="range" min="0" max="3" value="0" step="1" aria-label="Step of the agent's run" />
-          <ol class="stage-names" id="stage-names"></ol>
+          <ol class="stage-names" id="stage-names" aria-label="Step of the agent's run"></ol>
         </div>
       </section>
 
       <section class="film" data-ink="light" aria-labelledby="film-title">
         <h2 id="film-title">A real run, sped up</h2>
         <p>Nothing here is mocked. This is the studio during a recorded run, with the solver working each try again and the timetable moving as it answers.</p>
-        <video src="/web/assets/agent-run.webm" poster="/web/assets/agent-run.jpg" width="1280" height="720" muted loop playsinline autoplay preload="metadata" aria-label="Screen recording of the agent working through the Bonnaroo storm in the studio, at four times speed"></video>
+        <video src="/web/assets/agent-run.webm?v=3" poster="/web/assets/agent-run.jpg?v=3" width="1280" height="720" muted loop playsinline autoplay preload="metadata" aria-label="Screen recording of the agent working through the Bonnaroo storm in the studio, at four times speed"></video>
       </section>
 
       <section class="field grey" id="qloo" data-ink="dark" aria-labelledby="qloo-title">
@@ -95,17 +104,17 @@
           <article>
             <h3>Who cannot be on at once</h3>
             <p>Each act asks Qloo to rank every other act on the bill, comedians and podcasts included. Two acts that rank each other near the top share a crowd, so they should not play against each other.</p>
-            <img src="/web/assets/shot-pair.png" width="435" height="430" alt="A pair of acts in the studio, showing each other's rank and the taste tags their crowds share" loading="lazy" />
+            <img src="/web/assets/shot-pair.png?v=3" width="435" height="430" alt="A pair of acts in the studio, showing each other's rank and the taste tags their crowds share" loading="lazy" />
           </article>
           <article>
             <h3>Which set to lose</h3>
             <p>When a set must go, the smallest draw goes first, using Qloo popularity. Without it the same solver drops whichever act its search reaches, and that can be a far bigger name.</p>
-            <img src="/web/assets/shot-blind.png" width="1374" height="492" alt="The same rescue solved without Qloo, with a clash and a different act dropped" loading="lazy" />
+            <img src="/web/assets/shot-blind.png?v=3" width="1374" height="492" alt="The same rescue solved without Qloo, with a clash and a different act dropped" loading="lazy" />
           </article>
           <article>
             <h3>Why, in words a person can check</h3>
             <p>Qloo's audience comparison gives the taste tags two crowds share. A programmer can see the reason and overrule it, or mark a clash as intentional.</p>
-            <img src="/web/assets/shot-trace.png" width="867" height="460" alt="The agent's step list in the studio, with each tool call and its result" loading="lazy" />
+            <img src="/web/assets/shot-trace.png?v=3" width="867" height="460" alt="The agent's step list in the studio, with each tool call and its result" loading="lazy" />
           </article>
         </div>
         <p class="fine">Models never invent a pair. An act Qloo cannot identify stays unknown, never zero: 11 of the 28 acts here, because a wrong match would mean a wrong answer.</p>
@@ -161,7 +170,7 @@
         <div class="end end-main">
           <h2 id="close-title">Run that Sunday yourself</h2>
           <p>Open the replay and watch the agent work it, step by step, on the real timetable. Bring your own bill when you are done.</p>
-          <a class="button dark" href="/studio?day=bonnaroo-2026-sunday&amp;watch=1">Open the rescue desk</a>
+          <a class="button dark" href="/studio?day=bonnaroo-2026-sunday&amp;watch=1">Watch the agent work</a>
         </div>
         <div class="end end-flat"></div>
       </section>

@@ -29,6 +29,7 @@ The repository holds no Qloo data, so a build from a clean clone has no worked e
 | `COUNTERSET_PUBLIC=1` | Open to anyone: hides other visitors' workspaces, turns off live Qloo calls and caps live agent runs. The Dockerfile sets it. |
 | `GEMINI_FREE_API_KEY` | Needed only for "Run it live". Without it, "Watch the agent" still works, because it replays recorded decisions and re-runs every tool. |
 | `AGENT_RUNS_PER_VISITOR_HOUR`, `AGENT_RUNS_PER_DAY` | Live agent caps. Defaults: 3 and 40. |
+| `COUNTERSET_UNLISTED=1` | Reachable by link only: sends `X-Robots-Tag: noindex` and a `robots.txt` that disallows everything. |
 | `COUNTERSET_SOLVER_WORKERS` | Solver threads for a rescue. Default: 8. Set it to the vCPU count. |
 | `MODEL_CALL_LIMIT` | Hard limit on model attempts, kept in `calls.jsonl`. Raise it for a public demo: one agent run uses about 12. |
 | `QLOO_API_KEY` | Not needed on the public demo, because the examples carry their Qloo evidence. |

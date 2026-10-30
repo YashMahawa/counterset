@@ -1460,3 +1460,246 @@ kbd {
   font-size: 11px;
   line-height: 1.1;
 }
+
+
+/* ---------- Same look as the public page: black, mint, orange, square corners, flat. ---------- */
+:root {
+  --ground: #000;
+  --surface: #fff;
+  --raised: #f2f2f2;
+  --active: #e6e6e6;
+  --border: #dcdcdc;
+  --rule: #ececec;
+  --control: #bdbdbd;
+  --text: #000;
+  --muted: #4d4d4d;
+  --accent: #000;
+  --accent-tint: #a7ff9c;
+  --negative: #c23b0c;
+  --pill-negative-bg: #ffd9c9;
+  --pill-negative-ink: #5a2410;
+  --pill-positive-bg: #a7ff9c;
+  --pill-positive-ink: #000;
+  --primary: #000;
+  --radius-card: 0;
+  --radius-control: 0;
+  --radius-sheet: 0;
+  --inset: 0px;
+  --fs-title: clamp(2rem, 1.3rem + 2.4vw, 3.25rem);
+  --fs-body: 15px;
+  --fs-small: 13px;
+}
+body {
+  background: #000;
+}
+.top,
+.top a,
+.mark {
+  color: #fff;
+}
+.mark span {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.mark svg rect {
+  fill: #a7ff9c;
+}
+.mark svg rect + rect {
+  fill: #f4581f;
+}
+.mark svg path {
+  stroke: #fff;
+}
+.day-switch,
+.day-switch strong {
+  color: #fff;
+  background: transparent;
+}
+.day-switch span,
+.stamp {
+  color: #cfcfcf;
+}
+.day-switch:hover:not(:disabled) {
+  background: #2a2a2a;
+}
+.top-end button.quiet {
+  color: #fff;
+  background: transparent;
+}
+.top-end button.quiet:hover:not(:disabled) {
+  background: #2a2a2a;
+}
+.mode {
+  background: #2a2a2a;
+}
+.mode button {
+  color: #fff;
+  background: transparent;
+}
+.mode button[aria-pressed="true"] {
+  background: #a7ff9c;
+  color: #000;
+}
+.mode button:hover:not(:disabled) {
+  color: #fff;
+  background: #3a3a3a;
+}
+.mode button[aria-pressed="true"]:hover:not(:disabled) {
+  background: #a7ff9c;
+  color: #000;
+}
+body[data-public="yes"] .mode,
+body[data-public="yes"] .stamp,
+body[data-public="yes"] #auth {
+  display: none;
+}
+.sheet {
+  border: 0;
+}
+h1 {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.finding {
+  font-size: clamp(1.125rem, 1rem + 0.5vw, 1.375rem);
+  line-height: 1.3;
+  font-weight: 500;
+}
+button.primary {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+}
+button.primary:hover:not(:disabled) {
+  background: #2a2a2a;
+}
+.step[aria-current="step"]::after {
+  height: 3px;
+  background: #f4581f;
+}
+.views button[aria-selected="true"] {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+}
+.views button.blind[aria-selected="true"] {
+  background: #f4581f;
+  color: #000;
+  border-color: #f4581f;
+}
+.card {
+  border-color: var(--border);
+}
+/* Timetable colours mean the same thing as on the public page. */
+.set {
+  background: #ececec;
+  border: 0;
+  color: #000;
+}
+.set span {
+  color: #333;
+}
+.set.unresolved {
+  background: #fff;
+  border: 2px dashed #9a9a9a;
+}
+.set.unresolved strong {
+  color: #000;
+}
+.set.moved {
+  background: #a7ff9c;
+  border: 0;
+  box-shadow: none;
+}
+.set.short {
+  background: #a7ff9c;
+  outline: 0;
+  border-bottom: 5px solid #f4581f;
+}
+.set.moved.unresolved,
+.set.short.unresolved {
+  border-top: 2px dashed #000;
+  border-left: 2px dashed #000;
+  border-right: 2px dashed #000;
+}
+.set.clash {
+  background: #f4581f;
+  border: 0;
+}
+.set.clash strong,
+.set.clash span {
+  color: #000;
+}
+.set.cut {
+  background: #000;
+  border: 0;
+}
+.set.cut strong,
+.set.cut span {
+  color: #fff;
+}
+.ghost-set {
+  border-color: #b5b5b5;
+}
+.frame.hold {
+  background: #ffd9c9;
+  border: 0;
+  color: #5a2410;
+}
+svg.threads path.clash {
+  stroke: #000;
+}
+.legend i.clash {
+  background: #f4581f;
+  border: 0;
+}
+.legend i.moved {
+  background: #a7ff9c;
+  border: 0;
+}
+.legend i.short {
+  background: #a7ff9c;
+  outline: 0;
+  border-bottom: 4px solid #f4581f;
+}
+.legend i.hold {
+  background: #ffd9c9;
+  border: 0;
+}
+.score .bad {
+  background: #f4581f;
+}
+.score .bad strong,
+.score .bad span {
+  color: #000;
+}
+.trace li.on {
+  background: #a7ff9c;
+}
+.trace li.refused {
+  background: #ffd9c9;
+}
+.trace .trace-why,
+.trace small {
+  color: #4d4d4d;
+}
+
+.set,
+.ghost-set,
+.frame.hold,
+.legend i {
+  border-radius: 0;
+}
+.set.clash,
+.set.clash.moved,
+.set.clash.short,
+.set.clash.unresolved {
+  background: #f4581f;
+}
+.set.narrow strong {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}

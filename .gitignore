@@ -17,3 +17,4 @@ node_modules/
 .taste-skill/app/*
 !.taste-skill/app/direction.json
 .taste-skill/direction-v1-*.json
+.public-run/
