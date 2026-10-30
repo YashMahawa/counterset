@@ -3,7 +3,7 @@ const $ = (s) => document.querySelector(s);
 const tm = (n) => `${String(Math.floor(n / 60) % 24).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 const LABEL = 96;
 const AXIS = 24;
-const ROW = 56;
+const ROW = 66;
 
 function read() {
   const b64 = location.hash.slice(1).replace(/-/g, "+").replace(/_/g, "/");
@@ -29,7 +29,7 @@ function draw(d) {
   const from = Math.floor(Math.min(...d.sets.map((x) => x.start)) / 60) * 60;
   const to = Math.ceil(Math.max(...d.sets.map((x) => x.start + x.length)) / 60) * 60;
   const room = board.parentElement.clientWidth - LABEL - 16;
-  const ppm = Math.max(2, room / (to - from));
+  const ppm = Math.max(innerWidth < 860 ? 2 : 1.2, room / (to - from));
   board.style.width = LABEL + (to - from) * ppm + 16 + "px";
   board.style.height = AXIS + d.stages.length * ROW + "px";
   for (let t = from; t <= to; t += 60) add(board, "tick", tm(t), { left: LABEL + (t - from) * ppm + "px", top: "0px" });
