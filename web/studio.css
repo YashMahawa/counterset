@@ -3003,6 +3003,57 @@ button.big,
 .think-switch[hidden] {
   display: none;
 }
+.facts {
+  border: 1px solid #000;
+  background: #fff;
+  color: #000;
+}
+.facts summary {
+  padding: 10px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.facts-sides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border-top: 1px solid #000;
+}
+.facts-sides > div {
+  padding: 12px;
+}
+.facts-sides > div + div {
+  border-left: 1px solid #000;
+  background: #a7ff9c;
+}
+.facts h3 {
+  margin: 0 0 6px;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+.facts ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+.facts li + li {
+  margin-top: 6px;
+}
+.facts > p {
+  margin: 0;
+  padding: 10px 12px;
+  border-top: 1px solid #000;
+  font-size: 0.9375rem;
+}
+@media (max-width: 900px) {
+  .facts-sides {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .facts-sides > div + div {
+    border-left: 0;
+    border-top: 1px solid #000;
+  }
+}
 /* A failed run says so, and leaves a saved run to watch */
 .run-failed {
   margin: 12px 0;

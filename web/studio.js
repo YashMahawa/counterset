@@ -48,6 +48,7 @@ const S = {
   agentRunning: false,
   terms: null,
   rescueOpen: null,
+  factsOpen: null,
   typed: {},
   // The simple path: 1 your day, 2 fix it, 3 send it. All the details stay one click away.
   ui: "simple",
@@ -573,6 +574,7 @@ const STEPS = [
       const storm = closableStorm();
       const t = terms();
       let out = `<label class="budget">Up to <output id="budget-out">${budget}</output> acts may change<input id="budget" type="range" min="0" max="${Math.min(12, day().acts.length)}" value="${budget}" /></label>
+      ${factsPanel()}
       <details class="rescue" ${S.rescueOpen ?? !!storm ? "open" : ""}><summary>Rescue terms: let sets shrink, or drop</summary>
         <div class="fields"><label>Last set ends by<input id="r-curfew" type="time" value="${tm(t.curfew)}" /></label>
         <label>Sets may shrink to<select id="r-short">${[100, 85, 75, 60, 50].map((v) => `<option value="${v}" ${v === t.shortest ? "selected" : ""}>${v === 100 ? "Full length only" : v + "%"}</option>`).join("")}</select></label></div>
@@ -822,6 +824,38 @@ function limitsForm() {
     <label class="limit-check"><input type="checkbox" id="lim-drop" ${S.limits.drop ? "checked" : ""} /> Sets may be dropped</label>
   </div>`;
 }
+// What the solver will hold to, split by who said so. A plan is only as good as the assumed half.
+function factsPanel() {
+  const d = day();
+  const own = S.project.context?.kind === "own";
+  const acts = d.acts;
+  const stages = d.stages.length;
+  const span = (list) => (Math.min(...list) === Math.max(...list) ? `${Math.min(...list)}` : `${Math.min(...list)} to ${Math.max(...list)}`);
+  const reach = acts.map((a) => a.allowed_stages.length);
+  const heads = acts.filter((a) => a.headliner).length;
+  const played = acts.filter((a) => a.locked);
+  const given = [
+    `${plural(acts.length, "set")} on ${plural(stages, "stage")}, at the times ${own ? "you pasted" : "published for this day"}.`,
+    ...d.outages.map((o) => `${stage(o.stage_id).name} closed ${tm(o.start)}–${tm(o.end)}.`),
+    "The limits you set here, and every closure or limit in your message, quoted word for word.",
+  ];
+  const assumed = [
+    Math.min(...reach) === stages ? "Stage swaps: any set can move to any stage. Equipment or capacity may rule some out." : `Stage swaps: each set can use ${span(reach)} of the ${stages} stages. Equipment or capacity may rule more out.`,
+    `Changeovers: ${span(acts.map((a) => a.changeover))} minutes after a set${own ? ", from the gaps in your timetable" : ""}.`,
+    `Arrivals: every act is on site and can play between ${tm(Math.min(...acts.map((a) => a.earliest)))} and ${tm(Math.max(...acts.map((a) => a.latest)))}${own ? "" : ", with narrower windows set by set"}.`,
+    d.auto_lock_started ? "Sets already played: a set that began before a closure stays where it is. Every other set can move." : `Sets already played: ${played.length ? `${played.map((a) => a.name).join(", ")}, which stay${played.length === 1 ? "s" : ""} where ${played.length === 1 ? "it is" : "they are"}` : "none"}. Every other set can move.`,
+    ...(heads ? [`Headliners: ${heads} keep their full length and are never dropped.`] : []),
+  ];
+  const list = (rows) => `<ul>${rows.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+  return `<details class="facts" ${S.factsOpen ?? own ? "open" : ""}>
+    <summary>Check these facts: ${given.length} supplied, ${assumed.length} assumed</summary>
+    <div class="facts-sides">
+      <div><h3>Supplied</h3>${list(given)}</div>
+      <div><h3>Assumed, not confirmed</h3>${list(assumed)}</div>
+    </div>
+    <p>Wrong arrival? Say so in the message: “${esc(acts[0].name)} cannot start before ${tm(Math.min(1439, acts[0].earliest + 60))}.” Stage ruled out? Ask the agent to keep the set off it once there is a plan. Changeovers cannot be changed here.</p>
+  </details>`;
+}
 function askNote(text) {
   if (!S.config.model_configured && !hasRecording()) return "No model is set up on this server.";
   if (usesSavedRun(text)) {
@@ -849,6 +883,7 @@ function askForm() {
     <textarea id="agent-message" rows="${Math.min(8, Math.max(4, Math.ceil(typed.length / 58) + 1))}" placeholder="Main stage is closed 18:00 to 19:00. Curfew is 23:00.">${esc(typed)}</textarea>
     ${a?.error ? failBox("The live run failed", a.error, "Nothing on your timetable changed.") : ""}
     ${limitsForm()}
+    ${factsPanel()}
     ${liveSwitch(typed)}
     <div class="ask-foot"><button class="primary big" id="ask-go" ${offline ? "disabled" : ""}>${usesSavedRun(typed) ? "Play the saved run" : "Fix this day"}</button>${S.retrying || S.again ? `<button type="button" class="ask-cancel" data-action="cancel-edit">Cancel</button>` : ""}<span class="hint"><kbd>Enter</kbd> starts it. Nothing changes until you approve.</span></div>
     <p class="fine" id="ask-note">${esc(askNote(typed))}</p>
@@ -1723,6 +1758,7 @@ async function openProject(id) {
   S.agentRunning = false;
   S.terms = null;
   S.rescueOpen = null;
+  S.factsOpen = null;
   S.typed = {};
   S.undo = null;
   S.loading = null;
@@ -2417,6 +2453,10 @@ const actions = {
     await saveDay(d, had ? "Pair counts again" : "Pair marked intentional");
   },
 };
+// A closed panel stays closed when the page redraws.
+document.addEventListener("toggle", (e) => {
+  if (e.target.classList?.contains("facts")) S.factsOpen = e.target.open;
+}, true);
 document.addEventListener("click", (e) => {
   const t = e.target.closest("[data-action]");
   if (t && actions[t.dataset.action]) {

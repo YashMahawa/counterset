@@ -262,6 +262,8 @@ let active;
     await page.waitForSelector(".template");
     await page.click("#l-go");
     await page.waitForSelector("#think-switch");
+    check("facts: supplied and assumed are both named before a run", /Supplied/.test(await page.textContent(".facts")) && /Assumed, not confirmed/.test(await page.textContent(".facts")) && /Stage swaps/.test(await page.textContent(".facts")));
+    check("facts: closed on an example, so the path stays short", !(await page.getAttribute(".facts", "open") !== null));
     check("switch: no thinking level or speed is shown", !(await page.locator("#think-level, .think-lane").count()) && !/thinking/i.test(await page.textContent("#ask-note")));
     await page.click("#think-switch");
     check("switch: running live is one click", (await page.textContent("#ask-go")).includes("Fix this day"));
