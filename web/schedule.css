@@ -170,3 +170,14 @@ td:nth-child(2) {
     overflow: visible;
   }
 }
+@media (max-width: 560px) {
+  th,
+  td {
+    padding-right: 10px;
+    font-size: 0.9375rem;
+  }
+  td:nth-child(2),
+  td:nth-child(3) {
+    white-space: normal;
+  }
+}

@@ -166,6 +166,7 @@ let active;
       await page.waitForSelector("#agent-message");
       const before = (await headline()).trim();
       const set = page.locator(".set", { hasText: "Odd Mob" });
+      await set.scrollIntoViewIfNeeded();
       const box = await set.boundingBox();
       await page.mouse.move(box.x + box.width / 2, box.y + 20);
       await page.mouse.down();
@@ -215,7 +216,7 @@ let active;
     await page.click('[data-action="summary-more"]');
     check("plan: no rescue numbers reach the programmer", !/rescue \d/i.test(await page.textContent("#agent-summary")));
     check("plan: the ask box is there", await page.locator("#ask-agent-form").isVisible());
-    check("plan: it compares with and without Qloo", (await page.textContent(".qloo-card")).includes("Without Qloo") && (await page.locator(".qloo-card tr.differs").count()) > 0, (await page.textContent(".qloo-card p")).trim());
+    check("plan: it compares before, without and with Qloo, clashes first", /Before\s*Without Qloo\s*With Qloo/.test(await page.textContent(".qloo-card thead")) && (await page.textContent(".qloo-card tbody tr:first-child th")) === "Clashes" && (await page.locator(".qloo-card td.best").count()) === 1, (await page.textContent(".qloo-card p")).trim());
     for (const tab of ["messages", "steps", "changes"]) {
       await page.click(`[data-action="lower"][data-tab="${tab}"]`);
       check(`plan: the ${tab} tab opens`, (await page.getAttribute(`[data-action="lower"][data-tab="${tab}"]`, "aria-selected")) === "true" && (await page.textContent(".lower-panel")).trim().length > 10);
@@ -256,7 +257,111 @@ let active;
       check(`${id}: says it is a saved run`, /saved run/i.test(await page.textContent("#flow .eyebrow")), (await headline()).trim());
     }
 
+    // ---------- How hard the agent thinks ----------
+    await page.goto(`${BASE}/studio?template=${TEMPLATES[0]}`);
+    await page.waitForSelector(".template");
+    await page.click("#l-go");
+    await page.waitForSelector("#think");
+    check("think: a saved run locks the slider on high and says so", (await page.isDisabled("#think-level")) && (await page.textContent("#think-word")) === "High" && /recorded at high/.test(await page.textContent("#think-say")));
+    check("think: the saved note names the level", /high thinking/.test(await page.textContent("#ask-note")));
+    await page.selectOption("#lim-short", "75");
+    check("think: a change unlocks it", !(await page.isDisabled("#think-level")));
+    await page.selectOption("#lim-short", "");
+    check("think: undoing the change locks it again", await page.isDisabled("#think-level"));
+    await page.click("#think-switch");
+    check("think: running live is one click", !(await page.isDisabled("#think-level")) && (await page.textContent("#ask-go")).includes("Fix this day"));
+    for (const [v, word] of [["0", "Low"], ["1", "Medium"], ["2", "High"]]) {
+      await page.evaluate((x) => {
+        const i = document.querySelector("#think-level");
+        i.value = x;
+        i.dispatchEvent(new Event("input", { bubbles: true }));
+      }, v);
+      check(`think: ${word} shows its own word, motion and measured time`, (await page.textContent("#think-word")) === word && (await page.getAttribute("#think", "data-level")) === word.toLowerCase() && /Measured here: about \d+ seconds/.test(await page.textContent("#think-say")) && (await page.textContent("#ask-note")).includes(`${word.toLowerCase()} thinking`));
+    }
+    const motion = await page.evaluate(() => getComputedStyle(document.querySelector(".think-road")).animationName !== "none" || matchMedia("(prefers-reduced-motion: reduce)").matches);
+    check("think: the lane moves", motion);
+    await page.evaluate(() => {
+      const i = document.querySelector("#think-level");
+      i.value = 0;
+      i.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    let sent = null;
+    await page.route("**/agent", (route) => {
+      sent = route.request().postDataJSON();
+      route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Test stop" }) });
+    });
+    await page.click("#ask-go");
+    await page.waitForFunction(() => document.querySelector(".run-failed"));
+    check("think: the chosen level goes with the live request", sent?.mode === "live" && sent?.thinking === "low", JSON.stringify(sent?.thinking));
+    await page.unroute("**/agent");
+    await page.click("#think-switch");
+    await page.evaluate(() => (document.querySelector("#think-level").value = 0));
+    await page.waitForSelector("#think[data-locked='true']");
+    check("think: back to the saved run locks it on high", (await page.textContent("#think-word")) === "High" && (await page.textContent("#ask-go")).includes("saved run"));
+
+    // ---------- Before, without Qloo, with Qloo on the plan ----------
+    await page.click("#ask-go");
+    await page.waitForSelector("#approve", { timeout: RUN });
+    check("views: before, without Qloo, with Qloo, in that order", (await page.$$eval("#views button", (x) => x.map((e) => e.textContent).join("|"))) === "Before|Without Qloo|With Qloo");
+    await page.click('#views [data-view="blind0"]');
+    const banner = await page.textContent("#view-note");
+    check("views: the banner says it once", (banner.match(/Without Qloo/g) || []).length === 1, banner);
+    check("views: without Qloo lights the clashes", (await page.locator(".set.clash").count()) >= 2);
+    await page.click('#views [data-view="opt0"]');
+    check("views: with Qloo has none", (await page.locator(".set.clash").count()) === 0);
+
+    // ---------- The home page comparison ----------
+    await page.goto(`${BASE}/`);
+    await page.waitForSelector(".proof-state");
+    check("home: three states with clash counts", /Before[\s\S]*Without Qloo[\s\S]*With Qloo/.test(await page.textContent("#proof-states")) && (await page.locator(".proof-state").count()) === 3);
+    check("home: leads with Lollapalooza", /Lollapalooza/.test(await page.textContent('#proof-days [aria-pressed="true"]')) && /Ethel Cain/.test(await page.textContent("#proof-problem")));
+    check("home: without Qloo names the pairs and why", (await page.locator("#proof-pairs li").count()) === 4 && /minutes at once/.test(await page.textContent("#proof-pairs")) && /closest match/.test(await page.textContent("#proof-pairs")));
+    check("home: the clashing sets are lit", (await page.locator(".p-tile.clash").count()) >= 4);
+    await page.click('[data-state="with"]');
+    check("home: with Qloo nothing clashes and the pairs are kept apart", (await page.locator(".p-tile.clash").count()) === 0 && /kept apart/.test(await page.textContent("#proof-pairs-title")));
+    check("home: says what Qloo costs", /5 sets move/.test(await page.textContent("#proof-cost")));
+    check("home: the try link follows the day", (await page.getAttribute("#proof-try", "href")).includes("lollapalooza"));
+    await page.click("#proof-days button:nth-child(3)");
+    await page.click('[data-state="without"]');
+    check("home: another day swaps the board", (await page.locator(".p-tile").count()) > 0 && (await page.locator("#proof-pairs li").count()) > 0);
+    const noSideways = await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+    check("home: no sideways page scroll", noSideways);
+
+    // ---------- The mark moves on every switch ----------
+    await page.evaluate(() => sessionStorage.setItem("counterset-moving", "1"));
+    await page.goto(`${BASE}/studio`);
+    const arriving = await page.evaluate(() => {
+      const m = document.querySelector(".loader .l-set");
+      return document.documentElement.classList.contains("loader-arrive") && (getComputedStyle(m).animationName === "loader-settle-set" || matchMedia("(prefers-reduced-motion: reduce)").matches);
+    });
+    check("mark: arriving, the orange set still slides in", arriving);
+    await page.goto(`${BASE}/`);
+    await page.waitForFunction(() => getComputedStyle(document.querySelector(".loader")).visibility === "hidden");
+    await page.waitForSelector("#try-days a[href*=template]");
+    const leave = page.waitForNavigation();
+    await page.click("#try-days a[href*=template]");
+    const leaving = await page.evaluate(() => {
+      const m = document.querySelector(".loader.leaving .l-set");
+      return !!m && getComputedStyle(m).animationName.includes("loader-shuttle");
+    }).catch(() => false);
+    await leave;
+    check("mark: leaving, the orange set keeps moving", leaving);
+
+    // ---------- Scrollbars ----------
+    const bar = await page.evaluate(() => {
+      const out = [];
+      for (const s of document.styleSheets) for (const r of s.cssRules) if (r.selectorText?.includes("::-webkit-scrollbar-button")) out.push(r.style.display);
+      return out;
+    });
+    check("scrollbars: no arrows anywhere", bar.includes("none"));
+
     // ---------- Cancel ----------
+    await page.goto(`${BASE}/studio?template=${TEMPLATES[0]}`);
+    await page.waitForSelector(".template");
+    await page.click("#l-go");
+    await page.waitForSelector("#ask-go");
+    await page.click("#ask-go");
+    await page.waitForSelector("#approve", { timeout: RUN });
     await page.click('[data-action="retry"]');
     await page.focus("#agent-message");
     await page.keyboard.press("Escape");

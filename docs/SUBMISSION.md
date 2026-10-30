@@ -40,7 +40,7 @@ Every option is solved a second time with Qloo removed, and the app names what c
 - **Agent:** a model chooses tools one at a time in a bounded loop. It can only name terms; it cannot produce a schedule. Quotes must be exact, numbers in its summary must exist in the tool results, and it cannot finish until the comparisons have run. The recorded demo replays its decisions and re-runs every tool live.
 - **Solver:** OR-Tools CP-SAT, solving in order of importance: sets dropped, which sets go, attendee must-sees, shared-crowd clashes, minutes shortened, sets moved. It reports what it proved and what is only the best found in the time allowed. When the rules cannot all hold, it names the ones in conflict.
 - **Validator:** a separate pure-Python recount of every rule and objective. If it disagrees with the solver, the result is refused.
-- **App:** FastAPI, SQLite versioning with stale-proposal checks, and vanilla JavaScript. 88 backend tests, including brute-force checks of the solver, and a real-click browser walkthrough at desktop and phone width.
+- **App:** FastAPI, SQLite versioning with stale-proposal checks, and vanilla JavaScript. 107 backend tests, including brute-force checks of the solver, and a real-click browser walkthrough at desktop and phone width.
 
 ### What we found, and what we didn't
 

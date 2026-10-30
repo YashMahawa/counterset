@@ -6,11 +6,17 @@
     <title>Timetable — Counterset</title>
     <link rel="icon" href="/web/assets/icon.svg" type="image/svg+xml" />
     <link rel="preload" href="/web/assets/albert-sans.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/web/bar.css?v=2" />
-    <link rel="stylesheet" href="/web/schedule.css?v=2" />
+    <script src="/web/loader.js?v=3"></script>
+    <link rel="stylesheet" href="/web/loader.css?v=5" />
+    <link rel="stylesheet" href="/web/bar.css?v=4" />
+    <link rel="stylesheet" href="/web/schedule.css?v=3" />
     <script src="/web/schedule.js?v=3" defer></script>
   </head>
   <body>
+    <div class="loader" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><rect class="l-top" x="8" y="2" width="14" height="6" /><rect class="l-left" x="2" y="9" width="8" height="6" /><rect class="l-set" x="12" y="9" width="7" height="6" /><rect class="l-bottom" x="8" y="16" width="14" height="6" /></svg>
+      <span>Counterset</span>
+    </div>
     <header class="bar">
       <a class="brand" href="/">
         <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="14" height="6" /><rect x="2" y="9" width="8" height="6" /><rect class="logo-set" x="12" y="9" width="7" height="6" /><rect x="8" y="16" width="14" height="6" /></svg>

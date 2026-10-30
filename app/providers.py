@@ -1,6 +1,8 @@
 """Allowlisted server-only calls, durable quotas, private caches and bounded retries."""
 
+import contextvars
 import fcntl
+import hashlib
 import json
 import time
 import httpx
@@ -10,6 +12,23 @@ from .evidence import NotCached
 
 class ProviderError(Exception):
     pass
+
+
+# Who a live run belongs to. The paid backup key answers only inside backup_scope, so nothing else can spend it.
+backup_visitor = contextvars.ContextVar("backup_visitor", default=None)
+
+
+def backup_scope(visitor, work):
+    """Wraps a live run so the backup key may answer for this visitor, up to their caps."""
+
+    def run():
+        token = backup_visitor.set(hashlib.sha256(str(visitor).encode()).hexdigest()[:16])
+        try:
+            return work()
+        finally:
+            backup_visitor.reset(token)
+
+    return run
 
 
 class Gateway:
@@ -26,7 +45,7 @@ class Gateway:
             "qloo_successes": self.cfg.prior
             + sum(x["provider"] == "qloo" and 200 <= x["status"] < 300 for x in rows),
             "qloo_limit": self.cfg.limit,
-            "model_attempts": sum(x["provider"] == "model" for x in rows),
+            "model_attempts": sum(x["provider"] in ("model", "backup") for x in rows),
             "model_limit": self.cfg.model_limit,
         }
 
@@ -43,9 +62,10 @@ class Gateway:
     def request(self, provider, path, params=None, body=None, model=None):
         if provider == "qloo" and path not in {"/search", "/v2/insights", "/v2/analysis/compare"}:
             raise ProviderError("Endpoint not permitted")
-        if provider == "model" and model not in self.cfg.models:
+        backup = provider == "backup"
+        if provider != "qloo" and model not in self.cfg.models:
             raise ProviderError("Model not permitted")
-        if not (self.cfg.qloo_key if provider == "qloo" else self.cfg.model_keys):
+        if not (self.cfg.qloo_key if provider == "qloo" else self.cfg.backup_key if backup else self.cfg.model_keys):
             raise ProviderError("Provider key is not configured")
         with (self.cfg.private / "provider.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
@@ -53,16 +73,18 @@ class Gateway:
             budget = self.budget()
             if provider == "qloo" and budget["qloo_successes"] >= self.cfg.limit:
                 raise ProviderError("Qloo successful-call budget reached")
-            if provider == "model" and budget["model_attempts"] >= self.cfg.model_limit:
+            if provider != "qloo" and budget["model_attempts"] >= self.cfg.model_limit:
                 raise ProviderError("Model call budget reached")
             previous = [r for r in history if r["provider"] == provider]
+            if backup:
+                self.backup_allowed(previous)
             # Each key keeps its own pace and its own cooldown, so a refused key costs no wait.
             index = self.pick_key(previous) if provider == "model" else None
-            key = self.cfg.qloo_key if provider == "qloo" else self.cfg.model_keys[index]
-            pace = self.cfg.qloo_interval if provider == "qloo" else 5 / len(self.cfg.model_keys)
-            until = previous[-1].get("retry_until", 0) if provider == "qloo" and previous else self.cooling(previous, index)
+            key = self.cfg.qloo_key if provider == "qloo" else self.cfg.backup_key if backup else self.cfg.model_keys[index]
+            pace = self.cfg.qloo_interval if provider == "qloo" else 5 if backup else 5 / len(self.cfg.model_keys)
+            until = previous[-1].get("retry_until", 0) if provider == "qloo" and previous else self.cooling(previous, 0 if backup else index)
             wait = max(pace - (time.time() - previous[-1]["at"]), until - time.time(), 0) if previous else 0
-            if provider == "model" and until - time.time() > 30:
+            if provider != "qloo" and until - time.time() > 30:
                 raise ProviderError("Provider cooldown active; retry later")
             if wait:
                 time.sleep(min(wait, 60))
@@ -73,7 +95,7 @@ class Gateway:
                 if provider == "qloo"
                 else "https://generativelanguage.googleapis.com/v1beta"
             )
-            if provider == "model":
+            if provider != "qloo":
                 path = f"/models/{model}:generateContent"
             headers = (
                 {"X-Api-Key": key} if provider == "qloo" else {"x-goog-api-key": key}
@@ -97,7 +119,7 @@ class Gateway:
                         except ValueError:
                             retry = 60
                     # A key Google refuses stays out of the rotation for an hour.
-                    if provider == "model" and (status in {401, 403} or (status == 400 and "API_KEY" in r.text)):
+                    if provider != "qloo" and (status in {401, 403} or (status == 400 and "API_KEY" in r.text)):
                         retry = 3600
                         raise ProviderError("The model key was refused; no action applied")
                     if not 200 <= status < 300:
@@ -121,10 +143,36 @@ class Gateway:
                                 "retry_until": time.time() + retry if retry else 0,
                                 "model": model,
                                 **({} if index is None else {"key": index}),
+                                **({"visitor": backup_visitor.get()} if backup else {}),
                             }
                         )
                         + "\n"
                     )
+
+    def backup_allowed(self, rows):
+        """Stricter caps than the free keys: per visitor and for the whole server. Refuses before any call."""
+        cfg = self.cfg
+        now = time.time()
+        who = backup_visitor.get()
+        if cfg.backup_until and now > cfg.backup_until:
+            raise ProviderError("The backup key has expired")
+        within = lambda seconds, mine=False: sum(now - r["at"] < seconds and (not mine or r.get("visitor") == who) for r in rows)
+        if within(3600, True) >= cfg.backup_per_visitor_hour or within(86400, True) >= cfg.backup_per_visitor_day:
+            raise ProviderError("The backup key's limit for this visitor is reached")
+        if within(3600) >= cfg.backup_per_hour or within(86400) >= cfg.backup_per_day:
+            raise ProviderError("The backup key's limit for this server is reached")
+
+    def backup(self, body, model):
+        """The last resort, after every free key has failed. One retry, and only inside a visitor's live run."""
+        if not self.cfg.backup_key or not backup_visitor.get():
+            return None
+        for attempt in range(2):
+            try:
+                return self.request("backup", "", body=body, model=model)
+            except ProviderError as e:
+                if "limit" in str(e) or "expired" in str(e) or attempt == 1:
+                    return None
+                time.sleep(2)
 
     def cache_file(self, path, params):
         cache = self.cfg.private / "cache"
@@ -146,8 +194,9 @@ class Gateway:
         file = self.cache_file(path, params)
         return file.stat().st_mtime if file.exists() else None
 
-    def model(self, prompt, model=None, max_tokens=8192):
+    def model(self, prompt, model=None, max_tokens=8192, thinking=None):
         model = model or self.cfg.model
+        thinking = thinking or self.cfg.thinking
         body = {
             "systemInstruction": {
                 "parts": [
@@ -160,7 +209,7 @@ class Gateway:
             "generationConfig": {
                 "temperature": 0,
                 "maxOutputTokens": max_tokens,
-                "thinkingConfig": {"thinkingLevel": self.cfg.thinking},
+                "thinkingConfig": {"thinkingLevel": thinking},
                 "responseMimeType": "application/json",
             },
         }
@@ -191,6 +240,9 @@ class Gateway:
                 ):
                     reasons.append(next((c for c in ("HTTP 429", "HTTP 500", "HTTP 502", "HTTP 503") if c in str(e)), "no answer"))
                     if attempt == tries - 1:
+                        data = self.backup(body, model)
+                        if data is not None:
+                            break
                         raise ProviderError(
                             f"Gemini did not answer on any of the {keys} {'key' if keys == 1 else 'keys'} ({', '.join(sorted(set(reasons)))}). Nothing was applied."
                         ) from None
@@ -225,6 +277,6 @@ class Gateway:
             raise ProviderError("Model must return an object")
         return result, {
             "model": model,
-            "thinking": self.cfg.thinking,
+            "thinking": thinking,
             "usage": data.get("usageMetadata", {}),
         }

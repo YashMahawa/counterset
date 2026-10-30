@@ -92,3 +92,49 @@ button.bar-cta:hover:not(:disabled) {
     display: none;
   }
 }
+
+/* Every scrollable box in the product: a slim square thumb, no arrows, no white trough. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+::-webkit-scrollbar-thumb {
+  background: #8a8a8a;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #f4581f;
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #8a8a8a transparent;
+  }
+}
+
+/* The mark, busy: the orange set keeps sliding. */
+.busy-mark {
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+  overflow: visible;
+  fill: currentColor;
+}
+.busy-mark .logo-set {
+  fill: #f4581f;
+  animation: loader-shuttle 0.62s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+@media (prefers-reduced-motion: reduce) {
+  .busy-mark .logo-set {
+    animation: none;
+  }
+}

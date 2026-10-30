@@ -54,9 +54,16 @@ class Config:
         ]
         for path in filter(None, self.values.get("GEMINI_EXTRA_KEY_FILES", "").split(",")):
             self.extra_model_keys += list(read_env(path.strip(), "key").values())[:1]
+        # A paid key, tried only when every free key has failed, and only for a visitor's live run. See Gateway.backup.
+        self.backup_key = self.values.get("GEMINI_BACKUP_API_KEY", "")
+        self.backup_per_visitor_hour = int(self.values.get("BACKUP_CALLS_PER_VISITOR_HOUR", "14"))
+        self.backup_per_visitor_day = int(self.values.get("BACKUP_CALLS_PER_VISITOR_DAY", "28"))
+        self.backup_per_hour = int(self.values.get("BACKUP_CALLS_PER_HOUR", "40"))
+        self.backup_per_day = int(self.values.get("BACKUP_CALLS_PER_DAY", "120"))
+        self.backup_until = float(self.values.get("BACKUP_UNTIL", "0"))
         self.model = "gemini-3.5-flash-lite"
         self.models = ["gemini-3.5-flash-lite"]
-        # Every model call thinks. Only these two levels are allowed.
+        # Every model call thinks. A live run can ask for low, medium or high; this is the level when it does not say.
         self.thinking = "medium" if self.values.get("MODEL_THINKING", "").lower() == "medium" else "high"
         self.limit = min(5000, int(self.values.get("QLOO_SUCCESS_LIMIT", "5000")))
         self.prior = int(self.values.get("QLOO_PRIOR_SUCCESS", "0"))

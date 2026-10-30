@@ -110,7 +110,7 @@ def build(day: Day, edges: list[dict], budget: int):
         m.add_abs_equality(d, start[a.id] - draft.start)
         displacement.append(d)
     for o in day.outages:
-        lit = guard(f"{names[o.stage_id]} hold {clock(o.start)}–{clock(o.end)}")
+        lit = guard(f"{names[o.stage_id]} closed {clock(o.start)}–{clock(o.end)}")
         by_stage[o.stage_id].append(
             m.new_optional_fixed_size_interval_var(o.start, o.end - o.start, lit, f"hold_{o.stage_id}_{o.start}")
         )
@@ -249,12 +249,16 @@ def solve(day: Day, edges: list[dict], budget: int = 4, seconds: float = 12, pri
         # The passes people care about most may spend half of what is left; a pass that
         # proves early hands its time on.
         share = remaining / 2 if name in {"cuts", "cut_draw", "cue_conflicts", "trim_minutes"} else remaining / (len(order) - index)
+        # Until one schedule exists, nothing can be said about the day, so the search keeps all its time.
+        if placements is None:
+            share = remaining
         s = _solver(share if rescue else remaining, workers)
         status = s.solve(m)
         label = s.status_name(status)
         if status == cp_model.INFEASIBLE:
             core = [by_index.get(i, f"rule {i}") for i in s.sufficient_assumptions_for_infeasibility()]
-            core, decided = minimal_core(day, budget, core, seconds=max(4.0, seconds))
+            # Naming the rules is a courtesy on top of the proof, so it never takes longer than the search.
+            core, decided = minimal_core(day, budget, core, seconds=min(4.0, seconds))
             return {
                 "status": "INFEASIBLE",
                 "placements": [],

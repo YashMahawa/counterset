@@ -5,19 +5,21 @@ import io
 import json
 import secrets
 import time
+from pathlib import Path
+from typing import Literal
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field
 from .agent import brief, llm_baseline, propose_changes
-from . import ask_agent, desk_agent
+from . import ask_agent, desk_agent, proof
 from .config import Config
 from .domain import Day, Placement, Priority, Strict, Kind, QLOO_TYPES, digest, reference_hash
 from .evidence import age_days, all_edges, attendee_edges, entities, explain_pairs, fetch_snapshot, genre_edges, identity_key
 from .examples import Examples
 from .fixtures import demo
 from . import lineup
-from .providers import Gateway, ProviderError
+from .providers import Gateway, ProviderError, backup_scope
 from .repair import apply_scenario, as_run_audit, hold_stage, placements, plan, site_hold
 from .solver import solve
 from .stats import random_fill
@@ -56,11 +58,13 @@ class AgentRun(Versioned):
     mode: str = "replay"
     model: str = "gemini-3.5-flash-lite"
     limits: Limits | None = None
+    thinking: Literal["low", "medium", "high"] | None = None
 
 
 class Ask(Strict):
     text: str = Field(min_length=1, max_length=1000)
     model: str = "gemini-3.5-flash-lite"
+    thinking: Literal["low", "medium", "high"] | None = None
 
 
 class Change(Versioned):
@@ -134,6 +138,14 @@ class Lineup(Strict):
 class Resolve(Strict):
     query: str = Field(min_length=1, max_length=120)
     kind: Kind = "artist"
+
+
+def thinking_measured():
+    """Run times per thinking level, from scripts/thinking_bench.py. The slider shows these or no numbers at all."""
+    try:
+        return json.loads((Path(__file__).parent / "thinking_bench.json").read_text())["levels"]
+    except (OSError, ValueError, KeyError):
+        return None
 
 
 def create_app(config=None):
@@ -281,6 +293,8 @@ def create_app(config=None):
             "examples": examples.list(),
             "local_only": not bool(cfg.access_token),
             "stale_days": STALE_DAYS,
+            "thinking": cfg.thinking,
+            "thinking_measured": thinking_measured(),
         }
 
     @app.get("/api/projects")
@@ -619,6 +633,7 @@ def create_app(config=None):
                     "trace": trace,
                     "mode": "saved",
                     "model": recorded["model"],
+                    "thinking": recorded.get("thinking"),
                     "message": req.text,
                 }
                 pid = store.put("proposal", proposal)
@@ -636,6 +651,7 @@ def create_app(config=None):
                     day, p["evidence"], context, req.text, gateway, req.model, step,
                     turns=recorded["decisions"] if req.mode == "replay" else None, seconds=cfg.agent_solve_seconds,
                     limits=req.limits.model_dump() if req.limits else None,
+                    thinking=req.thinking,
                 )
                 proposal = desk_agent.to_proposal(outcome, day)
                 proposal.update(
@@ -649,6 +665,7 @@ def create_app(config=None):
                         "mode": req.mode,
                         "recorded": {k: recorded[k] for k in ("model", "at")} if req.mode == "replay" else None,
                         "model": req.model if req.mode == "live" else recorded["model"],
+                        "thinking": (req.thinking or cfg.thinking) if req.mode == "live" else recorded.get("thinking"),
                         "usage": outcome["usage"],
                         "decisions": outcome["decisions"],
                         "message": req.text,
@@ -666,7 +683,7 @@ def create_app(config=None):
                 store.put("job", {"status": "FAILED", "label": "Rescue agent", "error": message, "trace": trace, "mode": req.mode}, jid)
 
         # A saved run calls no model and no solver: it costs nothing and shows the real steps.
-        pool.submit(run_saved if req.mode == "replay" and recorded.get("saved") else run)
+        pool.submit(run_saved if req.mode == "replay" and recorded.get("saved") else backup_scope(visitor(request), run))
         return {"job_id": jid}
 
     @app.get("/api/agent-replay")
@@ -685,6 +702,15 @@ def create_app(config=None):
             "final": saved["proposal"]["options"][0]["placements"],
             "steps": [{"n": t["n"], "tool": t["tool"], "thought": t["thought"], "line": t["line"], "ok": t["ok"], "placements": t["view"].get("placements")} for t in saved["trace"]],
         }
+
+    proof_cache = {}
+
+    @app.get("/api/qloo-proof")
+    def qloo_proof():
+        """Before, without Qloo and with Qloo for each saved day. No model and no Qloo call."""
+        if "days" not in proof_cache:
+            proof_cache.update(proof.build(examples))
+        return proof_cache
 
     @app.post("/api/proposals/{pid}/ask")
     def ask(pid, req: Ask, request: Request):
@@ -715,10 +741,10 @@ def create_app(config=None):
 
         def run():
             try:
-                out = ask_agent.run(proposal, p["evidence"], req.text, gateway, req.model, step, seconds=cfg.agent_solve_seconds, qloo_cap=qloo_cap)
+                out = ask_agent.run(proposal, p["evidence"], req.text, gateway, req.model, step, seconds=cfg.agent_solve_seconds, qloo_cap=qloo_cap, thinking=req.thinking)
                 chat = [*proposal.get("chat", []), {"q": req.text, "a": out["answer"], "changed": bool(out.get("plan")), "steps": [t["line"] for t in trace], "model": req.model}]
                 if out.get("plan"):
-                    new = {**proposal, **out["plan"], "chat": chat, "parent": pid, "changed_by_ask": True, "created": time.time(), "model": req.model, "message": proposal.get("message")}
+                    new = {**proposal, **out["plan"], "chat": chat, "parent": pid, "changed_by_ask": True, "created": time.time(), "model": req.model, "thinking": req.thinking or cfg.thinking, "message": proposal.get("message")}
                     new.pop("id", None)
                     new_id = store.put("proposal", new)
                     result = {"answer": out["answer"], "proposal_id": new_id}
@@ -730,7 +756,7 @@ def create_app(config=None):
                 known = isinstance(e, (ProviderError, ValueError, desk_agent.AgentStop))
                 store.put("job", {"status": "FAILED", "label": "Asking the agent", "error": str(e) if known else "The agent stopped. Nothing changed.", "trace": trace}, jid)
 
-        pool.submit(run)
+        pool.submit(backup_scope(visitor(request), run))
         return {"job_id": jid}
 
     @app.get("/api/rescue-table")
@@ -818,6 +844,10 @@ def create_app(config=None):
                     acts[item["act_id"]].latest = item["value"]
                 elif item["action"] == "lock":
                     acts[item["act_id"]].locked = True
+                elif item["action"] == "rescue_term":
+                    # The page carries this into the repair form. The day itself does not change.
+                    item["status"] = "APPROVED"
+                    continue
                 else:
                     raise HTTPException(422, "Unsupported items need a person to act on them")
                 item["status"] = "APPROVED"

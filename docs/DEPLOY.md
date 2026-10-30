@@ -36,12 +36,15 @@ The repository holds no Qloo data, so a build from a clean clone has no worked e
 | `QLOO_PRIOR_SUCCESS`, `QLOO_SUCCESS_LIMIT` | Calls already used, and the total to stop at. Set these on a host with a temporary disk, because its ledger resets on restart. |
 | `GEMINI_FREE_API_KEY` | Needed for live runs and questions to the agent. Without it, the saved runs of all four examples still play, because they are stored whole. |
 | `GEMINI_FREE_API_KEY_2`, `GEMINI_FREE_API_KEY_3` | More free keys, used in turn. A key that is limited or refused sits out and the next one answers. |
-| `MODEL_THINKING` | `high` (default) or `medium`. Thinking is never off. |
+| `GEMINI_BACKUP_API_KEY` | A paid key, used only when every free key fails. Without it, the page offers a saved run at that point. |
+| `BACKUP_UNTIL` | Unix time after which the paid key stops being used. Without it, the paid key is off. |
+| `BACKUP_CALLS_PER_VISITOR_HOUR`, `BACKUP_CALLS_PER_VISITOR_DAY`, `BACKUP_CALLS_PER_HOUR`, `BACKUP_CALLS_PER_DAY` | Caps on paid calls. Defaults 14, 28, 40 and 120. The totals live on the server's disk, so a restart on a temporary disk clears them. Set a budget alert on the key's Google project too. |
+| `MODEL_THINKING` | `high` (default) or `medium`, for runs that name no level. The page can choose low, medium or high for each live run. Thinking is never off. |
 | `MODEL_CALL_LIMIT` | Total model calls before the server stops asking. Default 500. |
 | `ASKS_PER_VISITOR_HOUR`, `ASKS_PER_DAY` | Caps on questions to the agent. Defaults 12 and 80. |
 | `AGENT_RUNS_PER_VISITOR_HOUR`, `AGENT_RUNS_PER_DAY` | Live agent caps. Defaults: 3 and 40. |
 | `COUNTERSET_UNLISTED=1` | Reachable by link only: sends `X-Robots-Tag: noindex` and a `robots.txt` that disallows everything. |
-| `COUNTERSET_SOLVER_WORKERS` | Solver threads for a rescue. Default: 8. Set it to the vCPU count. |
+| `COUNTERSET_SOLVER_WORKERS` | Solver threads for a rescue. Default: 8. Set it to the vCPU count, and to 1 on a fraction of a core: at a tenth of a core, 8 threads found nothing where 1 found a plan. |
 | `MODEL_CALL_LIMIT` | Hard limit on model attempts, kept in `calls.jsonl`. Raise it for a public demo: one agent run uses about 12. |
 | `QLOO_API_KEY` | Needed for “Try your own lineup”. Without it the worked examples still work from their recorded rows. |
 

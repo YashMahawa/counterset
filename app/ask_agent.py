@@ -22,7 +22,7 @@ Rules:
 - For a question about what you did or why, look it up with a tool, then call answer. Do not guess why a set moved: use explain_act.
 - For a request to change something, call change_plan with the new rules, then propose_plan if it worked. Use the rule that says what was asked: to keep an act off a stage, use avoid_stage, not keep_original. If it failed, try once more with a gentler rule that still does what was asked. If that fails too, call answer: say in plain words what stands in the way, by name, and what the programmer could change. Nothing changes until a person approves.
 - Keep to what was asked. Do not relax a term the programmer did not ask you to relax.
-- Answers are at most 70 plain words, for a busy person. Use only numbers and names from tool results or the question.
+- Answers are at most 70 plain words, for a busy person. Call every act by its name, never he or she. Use only numbers and names from tool results or the question.
 - Never claim attendance or ticket effects, never give safety or crowd instructions, and never say you approved or sent anything.
 
 Tools:
@@ -207,6 +207,11 @@ class AskSession:
         if act is None:
             raise ValueError("A rule needs a known act_id.")
         if kind == "keep_original":
+            # A locked set may stand inside a closure only if it began before it. A person asking for the old slot cannot undo a closure.
+            d = next(p for p in data["draft"] if p["act_id"] == act["id"])
+            for o in data["outages"]:
+                if o["stage_id"] == d["stage_id"] and d["start"] < o["end"] and o["start"] < d["start"] + act["duration"]:
+                    raise ValueError(f"{act['name']}'s original slot, {clock(d['start'])}, is inside the closure of {self.stage_name(o['stage_id'])} {clock(o['start'])}–{clock(o['end'])}. It cannot go back there.")
             act["locked"] = True
         elif kind == "set_slot":
             self.stage_name(rule.get("stage_id"))
@@ -300,11 +305,21 @@ class AskSession:
         pid = args.get("plan_id")
         if not isinstance(pid, int) or not 0 <= pid < len(self.plans) or not self.plans[pid]["result"].get("placements"):
             raise ValueError("Use a plan_id that found a schedule.")
-        text = self.check_words(args.get("answer"))
         chosen = self.plans[pid]
         result = dict(chosen["result"])
         result["without_qloo"] = counterfactual(chosen["day"], all_edges(chosen["day"], self.evidence), result, chosen["budget"], self.seconds)
         names = {a.id: a.name for a in chosen["day"].acts}
+        summary = plan_summary(result["audit"], len(chosen["day"].acts), result["without_qloo"], names.get)
+        # The plan is real whatever the words say, so words that fail the number check give way to the solver's.
+        try:
+            text = self.check_words(args.get("answer"))
+        except ValueError:
+            text = summary
+        # A request the plan already meets is an answer, not a new plan to approve.
+        now = self.places()
+        if all(p == now.get(p["act_id"]) for p in result["placements"]):
+            self.done = {"answer": text, "plan": None}
+            return "The plan already does this, so nothing changes.", {"done": True}
         self.done = {
             "answer": text,
             "plan": {
@@ -313,7 +328,7 @@ class AskSession:
                 "day": chosen["day"].model_dump(),
                 "scenario": chosen["scenario"],
                 "budget": chosen["budget"],
-                "summary": plan_summary(result["audit"], len(chosen["day"].acts), result["without_qloo"], names.get),
+                "summary": summary,
                 "summary_source": "deterministic",
                 "summary_rejected": None,
                 "notices": notices(chosen["day"], result["placements"]),
@@ -325,8 +340,18 @@ class AskSession:
         self.done = {"answer": self.check_words(args.get("text")), "plan": None}
         return "Answered. The plan did not change.", {"done": True}
 
+    def close_out(self, lines):
+        """The model stopped before answering. Whatever the tools found is still true, so the person gets that."""
+        ready = [i for i, p in enumerate(self.plans) if p["result"].get("placements")]
+        if ready:
+            self.propose_plan({"plan_id": ready[-1], "answer": ""})
+            return bool(self.done)
+        if lines:
+            self.done = {"answer": " ".join(lines[-3:]), "plan": None}
+        return bool(self.done)
 
-def run(proposal, evidence, question, gateway, model, on_step=lambda step: None, seconds=6, qloo_cap=lambda: None, turns=None):
+
+def run(proposal, evidence, question, gateway, model, on_step=lambda step: None, seconds=6, qloo_cap=lambda: None, turns=None, thinking=None):
     """Runs the loop. `turns` feeds in decisions instead of calling a model, for tests."""
     session = AskSession(proposal, evidence, question, gateway, seconds, qloo_cap)
     tool_text = "\n".join(f"{k}: {json.dumps(v)}" for k, v in TOOL_DOCS.items())
@@ -357,7 +382,7 @@ def run(proposal, evidence, question, gateway, model, on_step=lambda step: None,
                 + "\nSTEPS SO FAR: " + json.dumps(steps)
                 + "\nReply with the next tool call as JSON."
             )
-            decision, _ = ask_model(gateway, prompt, model)
+            decision, _ = ask_model(gateway, prompt, model, thinking)
         tool = decision.get("tool") if isinstance(decision, dict) else None
         args = decision.get("args") if isinstance(decision, dict) and isinstance(decision.get("args"), dict) else {}
         thought = str(decision.get("thought", ""))[:240] if isinstance(decision, dict) else ""
@@ -370,12 +395,14 @@ def run(proposal, evidence, question, gateway, model, on_step=lambda step: None,
         except (ValueError, TypeError) as e:
             line, result, ok = f"Refused: {e}", {"refused": str(e)}, False
             errors += 1
-            if errors >= 3:
-                raise AgentStop("The agent could not answer that. Nothing changed.") from None
         session.facts |= numbers_in(json.dumps(result, ensure_ascii=False))
         step = {"n": n + 1, "thought": thought, "tool": tool, "args": args, "line": line, "result": result, "ok": ok}
         trace.append(step)
         on_step(step)
         if session.done:
             return {**session.done, "trace": trace}
-    raise AgentStop("The agent ran out of steps. Nothing changed.")
+        if errors >= 3:
+            break
+    if session.close_out([t["line"] for t in trace if t["ok"]]):
+        return {**session.done, "trace": trace}
+    raise AgentStop("The agent could not answer that. Nothing changed.")

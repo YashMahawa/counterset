@@ -156,6 +156,195 @@ async function startLive() {
   }
 }
 
+// ---------- Before, without Qloo, with Qloo ----------
+// Every number comes from the saved runs through /api/qloo-proof. No model and no Qloo call.
+const proof = { data: null, day: 0, state: "without", tiles: new Map(), focus: null };
+const STATES = [["before", "Before"], ["without", "Without Qloo"], ["with", "With Qloo"]];
+const PROOF_ROW = 46;
+const PROOF_AXIS = 24;
+const PROOF_LABEL = 84;
+const clashWord = (n) => plural(n, "clash", "clashes");
+const pairId = (a, b) => [a, b].sort().join("|");
+
+function proofGeometry(d) {
+  const wrap = $("#proof-wrap");
+  const width = Math.max(innerWidth < 860 ? 900 : 0, wrap.clientWidth);
+  const from = Math.floor(d.from / 60) * 60;
+  const to = Math.ceil(d.to / 60) * 60;
+  const out = [d.before, d.without, d.with].some((s) => s.dropped.length);
+  return { width, from, to, out, ppm: (width - PROOF_LABEL) / (to - from), rows: d.stages.length + (out ? 1 : 0) };
+}
+function proofBase(d) {
+  const g = proofGeometry(d);
+  const board = $("#proof-board");
+  board.textContent = "";
+  proof.tiles.clear();
+  board.style.width = g.width + "px";
+  board.style.height = PROOF_AXIS + g.rows * PROOF_ROW + "px";
+  const add = (cls, text, css) => {
+    const el = document.createElement("div");
+    el.className = cls;
+    el.textContent = text;
+    Object.assign(el.style, css);
+    board.appendChild(el);
+    return el;
+  };
+  for (let t = g.from; t <= g.to; t += 60) add("p-tick", tm(t), { left: PROOF_LABEL + (t - g.from) * g.ppm + "px" });
+  const row = Object.fromEntries(d.stages.map((s, i) => [s.id, i]));
+  d.stages.forEach((s, i) => {
+    add("p-lane", "", { top: PROOF_AXIS + i * PROOF_ROW + "px", height: PROOF_ROW - 4 + "px" });
+    add("p-name", s.name, { top: PROOF_AXIS + i * PROOF_ROW + "px", height: PROOF_ROW - 4 + "px" });
+  });
+  if (g.out) add("p-name", "Dropped", { top: PROOF_AXIS + d.stages.length * PROOF_ROW + "px", height: PROOF_ROW - 4 + "px" });
+  for (const o of d.closed) {
+    add("p-closed", "", {
+      left: PROOF_LABEL + (Math.max(o.start, g.from) - g.from) * g.ppm + "px",
+      top: PROOF_AXIS + row[o.stage_id] * PROOF_ROW + "px",
+      width: (Math.min(o.end, g.to) - Math.max(o.start, g.from)) * g.ppm + "px",
+      height: PROOF_ROW - 4 + "px",
+    });
+  }
+  for (const a of d.acts) {
+    const el = add("p-tile", a.name, {});
+    proof.tiles.set(a.id, el);
+  }
+}
+function proofDraw() {
+  const d = proof.data.days[proof.day];
+  const s = d[proof.state];
+  const g = proofGeometry(d);
+  const row = Object.fromEntries(d.stages.map((x, i) => [x.id, i]));
+  const acts = Object.fromEntries(d.acts.map((a) => [a.id, a]));
+  const lit = new Set(s.clashes.flatMap((c) => [c.a, c.b]));
+  const start = Object.fromEntries(d.before.placements.map((p) => [p.act_id, p]));
+  const focus = proof.focus ? proof.focus.split("|") : null;
+  let out = 0;
+  for (const p of s.placements) {
+    const el = proof.tiles.get(p.act_id);
+    const length = p.length ?? acts[p.act_id].duration;
+    const x = p.cut ? PROOF_LABEL + out++ * 104 : PROOF_LABEL + (p.start - g.from) * g.ppm;
+    const y = PROOF_AXIS + (p.cut ? d.stages.length : row[p.stage_id]) * PROOF_ROW;
+    el.style.transform = `translate(${x}px, ${y}px)`;
+    el.style.width = (p.cut ? 100 : length * g.ppm - 2) + "px";
+    el.style.height = PROOF_ROW - 4 + "px";
+    const was = start[p.act_id];
+    el.classList.toggle("clash", lit.has(p.act_id));
+    el.classList.toggle("moved", proof.state !== "before" && !p.cut && !lit.has(p.act_id) && (was.start !== p.start || was.stage_id !== p.stage_id));
+    el.classList.toggle("blocked", proof.state === "before" && d.blocked.includes(p.act_id));
+    el.classList.toggle("dropped", p.cut);
+    el.classList.toggle("dim", !!focus && !focus.includes(p.act_id));
+    el.title = p.cut ? `${acts[p.act_id].name}: dropped` : `${acts[p.act_id].name}, ${tm(p.start)}–${tm(p.start + length)}`;
+  }
+  $("#proof-days").querySelectorAll("button").forEach((b, i) => b.setAttribute("aria-pressed", String(i === proof.day)));
+  $("#proof-problem").textContent = d.message;
+  $("#proof-try").href = `/studio?template=${encodeURIComponent(d.id)}`;
+  $("#proof-states").innerHTML = STATES.map(([k, label]) => {
+    const n = d[k].clashes.length;
+    const bad = k === "before" ? (d.blocked.length === 1 ? `${acts[d.blocked[0]].name} cannot play the slot` : `${d.blocked.length} sets cannot play their slots`) : `${plural(d[k].moved, "set")} moved${d[k].dropped.length ? `, ${d[k].dropped.length} dropped` : ""}`;
+    return `<button type="button" class="proof-state ${n ? "bad" : "none"}" data-state="${k}" aria-pressed="${k === proof.state}"><span>${label}</span><strong>${clashWord(n)}</strong><small>${esc(bad)}</small></button>`;
+  }).join("");
+  proofPairs(d, s);
+  $("#proof-cost").textContent = proofCost(d);
+  $("#proof-key").innerHTML = [
+    s.clashes.length ? `<span><i class="k-clash"></i>Plays on top of a shared crowd</span>` : "",
+    proof.state === "before" ? `<span><i class="k-blocked"></i>Cannot play this slot</span>` : `<span><i class="k-moved"></i>Moved</span>`,
+    d.closed.length ? `<span><i class="k-closed"></i>Closed</span>` : "",
+  ].join("");
+}
+function proofPairs(d, s) {
+  const span = (id, at) => {
+    const a = d.acts.find((x) => x.id === id);
+    const p = at.placements.find((x) => x.act_id === id);
+    return p.cut ? `${a.name} is dropped` : `${a.name} ${tm(p.start)}–${tm(p.start + (p.length ?? a.duration))}`;
+  };
+  let title;
+  let rows;
+  if (proof.state === "with") {
+    const seen = new Set();
+    const pairs = [...d.without.clashes, ...d.before.clashes].filter((c) => !seen.has(pairId(c.a, c.b)) && seen.add(pairId(c.a, c.b)));
+    title = pairs.length ? `${plural(pairs.length, "pair")} kept apart` : "Nothing to keep apart";
+    rows = pairs.map((c) => [c, `${span(c.a, s)}, ${span(c.b, s)}`, ""]);
+  } else {
+    const before = new Set(d.before.clashes.map((c) => pairId(c.a, c.b)));
+    title = proof.state === "before" ? "Already clashing in the published timetable" : "Still at the same time after this fix";
+    rows = s.clashes.map((c) => [c, `${c.minutes} minutes at once`, proof.state === "without" && !before.has(pairId(c.a, c.b)) ? "The fix caused this one" : ""]);
+  }
+  $("#proof-pairs-title").textContent = title;
+  $("#proof-pairs").innerHTML = rows
+    .map(([c, what, tag]) => `<li><button type="button" data-pair="${esc(pairId(c.a, c.b))}" aria-pressed="${proof.focus === pairId(c.a, c.b)}"><strong>${esc(c.names[0])} × ${esc(c.names[1])}</strong>${tag ? `<em>${esc(tag)}</em>` : ""}<span>${esc(what)}</span>${c.why ? `<span>${esc(c.why)}</span>` : ""}</button></li>`)
+    .join("");
+}
+function proofCost(d) {
+  const a = d.with;
+  const b = d.without;
+  const parts = [];
+  if (a.moved !== b.moved) parts.push(`With Qloo ${plural(a.moved, "set moves", "sets move")}. Without it, ${b.moved} ${b.moved === 1 ? "does" : "do"}.`);
+  if (a.shortened !== b.shortened) parts.push(`Sets lose ${a.shortened} minutes with Qloo and ${b.shortened} without.`);
+  const drop = (s) => s.dropped.map((x) => `${x.name}${x.draw != null ? ` (${x.draw}% popularity)` : ""}`).join(", ");
+  if (a.dropped.length || b.dropped.length) parts.push(`With Qloo it drops ${drop(a) || "nobody"}. Without it, ${drop(b) || "nobody"}.`);
+  return parts.join(" ") || "Nothing extra on this day.";
+}
+function proofFocusTile(id) {
+  const el = proof.tiles.get(id);
+  const wrap = $("#proof-wrap");
+  if (el && wrap.scrollWidth > wrap.clientWidth) wrap.scrollLeft = new DOMMatrixReadOnly(getComputedStyle(el).transform).m41 - PROOF_LABEL - 12;
+}
+function proofChoose() {
+  const d = proof.data.days[proof.day];
+  proofDraw();
+  const first = d[proof.state].clashes[0];
+  if (first) proofFocusTile(first.a);
+}
+async function startProof() {
+  try {
+    const r = await fetch("/api/qloo-proof");
+    if (!r.ok) return;
+    proof.data = await r.json();
+    if (!proof.data.days.length) return;
+    $("#proof").hidden = false;
+    $("#proof-days").innerHTML = proof.data.days
+      .map((d) => `<button type="button"><strong>${esc(d.title)}</strong><span>${d.without.clashes.length} without Qloo, ${d.with.clashes.length} with</span></button>`)
+      .join("");
+    $("#proof-days").onclick = (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      proof.day = [...b.parentElement.children].indexOf(b);
+      proof.focus = null;
+      proofBase(proof.data.days[proof.day]);
+      proofChoose();
+    };
+    $("#proof-states").onclick = (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      proof.state = b.dataset.state;
+      proof.focus = null;
+      proofChoose();
+    };
+    $("#proof-pairs").onclick = (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      proof.focus = proof.focus === b.dataset.pair ? null : b.dataset.pair;
+      proofDraw();
+      if (proof.focus) proofFocusTile(proof.focus.split("|")[0]);
+    };
+    const wrap = $("#proof-wrap");
+    const pin = () => document.querySelectorAll(".p-name").forEach((n) => (n.style.transform = `translateX(${wrap.scrollLeft}px)`));
+    wrap.addEventListener("scroll", pin, { passive: true });
+    proofBase(proof.data.days[0]);
+    proofChoose();
+    pin();
+    let timer;
+    addEventListener("resize", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        proofBase(proof.data.days[proof.day]);
+        proofDraw();
+        pin();
+      }, 150);
+    });
+  } catch {}
+}
+
 // ---------- Watching the saved run ----------
 // Steps from one real run of the agent. Playing them calls no model and no solver.
 const STEP_WORDS = {
@@ -177,7 +366,7 @@ function filmStep() {
   if (step.placements) state.film = step.placements;
   draw();
   $("#watch-count").textContent = `Step ${film.at + 1} of ${film.run.steps.length}: ${STEP_WORDS[step.tool] || "Tried a step"}`;
-  $("#watch-thought").textContent = step.thought;
+  $("#watch-thought").textContent = step.thought.replace(/\b[Rr]escue (\d+)\b/g, (_, n) => `try ${+n + 1}`);
   $("#watch-line").textContent = step.line;
 }
 function filmEnd() {
@@ -186,7 +375,7 @@ function filmEnd() {
   draw();
   $("#watch-count").textContent = "The agent's plan. A person still has to approve it.";
   $("#watch-thought").textContent = film.run.summary;
-  $("#watch-line").textContent = "";
+  $("#watch-line").textContent = "These are the agent's own choices, so its numbers can differ from the two controls you set above.";
   $("#watch-play").textContent = "Play it again";
 }
 function filmTick() {
@@ -243,7 +432,7 @@ function startMotion() {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   // Each section's parts rise in turn, once. Content is only hidden once script is running.
   const parts = document.querySelectorAll(
-    "section h2:not(.visually-hidden), .try-steps, .try-days, .replay-top p, .replay, .assume, .jobs article, .faq details, .end, .places, .foot-notes",
+    "section h2:not(.visually-hidden), .try-steps, .try-days, .replay-top p, .replay, .assume, .proof-lede, .proof, .jobs article, .faq details, .end, .places, .foot-notes",
   );
   const seen = new IntersectionObserver(
     (entries) => {
@@ -278,5 +467,6 @@ async function startDays() {
 
 startMotion();
 startDays();
+startProof();
 startLive();
 startWatch();

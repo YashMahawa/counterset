@@ -20,8 +20,8 @@ This shows what was open, not what the festival should have done. It assumes eve
 
 1. **Pick a day.** Four real timetables are ready, each with real Qloo rows and real clashes. Change any line, or press **Clear it and paste mine** and paste your own: stage, act, start, end. CSV files and spreadsheet rows work too. Press **Check this day**.
 2. **See the clashes.** Each one says how long the acts overlap, how Qloo ranks them against each other and what their crowds share. A day you pasted is looked up and read by Qloo without another button. Drag a set to fix one by hand.
-3. **Say what went wrong, and press Enter.** An example problem is filled in, and you can replace it with anything. The agent records the problem and the solver answers each try. This takes about a minute on a small lineup, and the timetable moves as it works.
-4. **Decide.** Compare **Before**, **After** and **Without Qloo**, then press **Approve this plan**. The validator rechecks the plan and saves a numbered version.
+3. **Say what went wrong, and press Enter.** An example problem is filled in, and you can replace it with anything. Set the shortest a set may get, the last finish and whether sets may be dropped, and choose how hard the model thinks (low, medium or high). An untouched example plays its saved high-thinking run and says so; any change runs live. The agent records the problem and the solver answers each try. This takes about a minute, and the timetable moves as it works. If nothing fits your settings, it says which single change would work, and one press runs that.
+4. **Decide.** Compare **Before**, **Without Qloo** and **With Qloo**. Ask the agent why it moved a set, who has a similar crowd, or to change the plan: a change comes back as a new plan to approve. Then press **Approve this plan**. The validator rechecks the plan and saves a numbered version.
 5. **Send it.** You get a timetable link to share and a drafted message for each affected act. Counterset never sends anything itself.
 
 **All the details** in the top bar opens the full desk: identities, evidence, rescue terms, repair options, comparisons, exports and JSON. From an MCP client, add `/mcp` and call `rescue_day`.
@@ -43,7 +43,7 @@ Stage sizes and artist hours (about two hours either side of the published set) 
 - The browser only ever talks to this server, and the server only calls an allowlist of Qloo paths and one named Gemini model.
 - Every route that spends a key has an hourly limit per visitor and a daily limit across all visitors. A visitor is identified by the address Cloudflare reports, because `X-Forwarded-For` can be forged.
 - Worked examples carry their recorded rows, so they do not read Qloo again. Other websites cannot make a visitor's browser call the API, because writes need a custom header and a matching origin.
-- The Gemini keys are free-tier keys, so they cannot run up a bill. Up to three take turns, and a key that is limited or refused sits out while the next one answers. If all of them fail, the page says so and offers a saved run to watch. Google may use what it receives to improve its products. The interface says not to paste anything confidential.
+- The Gemini keys are free-tier keys, so they cannot run up a bill. Up to three take turns, and a key that is limited or refused sits out while the next one answers. A paid key is the last resort when all of them fail. It has its own strict limits per visitor, per hour and per day, and an end date. If that fails too, the page says so and offers a saved run to watch. Google may use what it receives to improve its products. The interface says not to paste anything confidential.
 - If a limit is reached, the visitor is told and the solver and audit keep working.
 
 This free server is small: a tenth of a CPU core, and it restarts after 15 idle minutes. A restart clears the server's disk, including approved versions and its running totals of calls. Your browser keeps a copy of your own lineup and brings it back, and a shared timetable link holds its own data, so it keeps working. For lasting use, run it on your own server.
@@ -70,6 +70,7 @@ A model reads the message and chooses tools. Code decides what is true.
 | Tool | What it does | Who computes the answer |
 | --- | --- | --- |
 | `close_site`, `close_stage`, `limit_act` | Record a closure or an act's limit. Each must quote the message word for word, or it is refused. | Controller |
+| `limit_terms` | Record a rule the message sets for the whole day, such as full-length sets only. It must quote the message, and every later try is held to it. | Controller |
 | `audit` | Which sets now break a rule, and which shared-crowd pairs clash. | Validator |
 | `try_rescue` | Solve the day under stated terms: finish time, how far sets may shrink, whether sets may drop. | CP-SAT, rechecked by the validator |
 | `compare_without_qloo` | Solve the same rescue with all Qloo signals removed, and name what changed. | CP-SAT and the validator |
@@ -83,10 +84,10 @@ In the recorded run, the model tries full-length sets with no drops and is told 
 
 - Invent a schedule. It names terms; only the solver produces placements.
 - State a number that was not computed. Its summary is checked against the tool results, and a failing summary is replaced by a computed one, with the reason shown.
-- Extend a hard stop, or follow an instruction hidden in the message.
+- Extend a hard stop, go outside the programmer's settings, or follow an instruction hidden in the message. A try outside the settings is corrected to the nearest one inside them, and the model is told.
 - Change anything. A finished run is a proposal. A person approves it, and the validator runs again first.
 
-If the model fails, nothing is applied and the app says why. The saved Bonnaroo run needs no model at all, so that day survives an exhausted quota.
+If the model stumbles or gives up after reading the problem, code finishes the same list of tries with the same solver, so a plan the settings allow is never lost, and the page says code finished it. If the model never reads the problem, nothing is applied and the app says why. The saved Bonnaroo run needs no model at all, so that day survives an exhausted quota.
 
 ## Exactly how Qloo is used
 

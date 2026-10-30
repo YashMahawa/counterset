@@ -7,11 +7,11 @@
     <title>Counterset — the rescue desk for festival days</title>
     <link rel="icon" href="/web/assets/icon.svg" type="image/svg+xml" />
     <link rel="preload" href="/web/assets/albert-sans.woff2" as="font" type="font/woff2" crossorigin />
-    <script src="/web/loader.js?v=2"></script>
-    <link rel="stylesheet" href="/web/loader.css?v=4" />
-    <link rel="stylesheet" href="/web/bar.css?v=3" />
-    <link rel="stylesheet" href="/web/landing.css?v=11" />
-    <script src="/web/landing.js?v=10" defer></script>
+    <script src="/web/loader.js?v=3"></script>
+    <link rel="stylesheet" href="/web/loader.css?v=5" />
+    <link rel="stylesheet" href="/web/bar.css?v=4" />
+    <link rel="stylesheet" href="/web/landing.css?v=12" />
+    <script src="/web/landing.js?v=12" defer></script>
   </head>
   <body>
     <div class="loader" aria-hidden="true">
@@ -25,8 +25,8 @@
       </a>
       <nav class="bar-links" aria-label="Page">
         <a href="#try">Try it</a>
-        <a href="#replay">The storm</a>
         <a href="#qloo">Why Qloo</a>
+        <a href="#replay">The storm</a>
         <a href="#questions">Questions</a>
       </nav>
       <a class="bar-cta" href="/studio">Open the desk</a>
@@ -38,6 +38,7 @@
         <div class="storm-foot">
           <div class="storm-action">
             <a class="button" href="#try">Try it on a real day</a>
+            <a class="storm-link" href="#qloo">See what Qloo changes</a>
           </div>
           <p class="storm-say">Counterset is a rescue agent for festival programmers. Tell it what went wrong. It rebuilds the day around who shares a crowd, and you approve.</p>
         </div>
@@ -54,6 +55,45 @@
           <a href="/studio"><strong>Open the desk</strong><span>Real festival days are ready to try.</span></a>
         </div>
         <a class="button dark" href="/studio">Paste my own lineup</a>
+      </section>
+
+<section class="field grey" id="qloo" data-ink="dark" aria-labelledby="qloo-title">
+        <h2 id="qloo-title">Same problem. Same solver. One has Qloo.</h2>
+        <p class="proof-lede">Every plan here passes the same hard rules. The only difference is whether the solver knows which acts share a crowd.</p>
+        <div class="proof" id="proof" hidden>
+          <div class="proof-days" id="proof-days" role="group" aria-label="Which day"></div>
+          <p class="proof-problem"><span>What went wrong</span> <q id="proof-problem"></q></p>
+          <div class="proof-states" id="proof-states" role="group" aria-label="Which timetable to show"></div>
+          <div class="proof-wrap" id="proof-wrap"><div class="proof-board" id="proof-board"></div></div>
+          <p class="proof-key" id="proof-key"></p>
+          <div class="proof-below">
+            <div>
+              <h3 id="proof-pairs-title"></h3>
+              <ul class="proof-pairs" id="proof-pairs"></ul>
+            </div>
+            <div class="proof-side">
+              <h3>What Qloo costs</h3>
+              <p id="proof-cost"></p>
+              <h3>Who says they share a crowd?</h3>
+              <p>Qloo does, so these numbers lean on Qloo being right. That is why each pair shows its reason. Read them, and overrule any you disagree with.</p>
+              <a class="button dark" id="proof-try" href="/studio">Try this day</a>
+            </div>
+          </div>
+        </div>
+        <div class="jobs jobs-short">
+          <article>
+            <h3>Who cannot be on at once</h3>
+            <p>Each act asks Qloo to rank every other act on the bill. Acts that rank each other high share a crowd, even across genres, comedy and podcasts.</p>
+          </article>
+          <article>
+            <h3>Which set to lose</h3>
+            <p>When a set must go, Qloo popularity says which. Without it, the same solver can drop a far bigger name.</p>
+          </article>
+          <article>
+            <h3>Why, in words you can check</h3>
+            <p>Qloo gives the tastes two crowds share. You can see the reason and overrule it.</p>
+          </article>
+        </div>
       </section>
 
 <section class="field night" id="replay" data-ink="light" aria-labelledby="replay-title">
@@ -104,24 +144,6 @@
           <p class="fallback" id="fallback">With a midnight finish and sets shortened to 75%, 27 of 28 sets could have played, against 17 on the day. Open the studio to run it.</p>
         </div>
         <p class="assume">This assumes every act was still on site and willing to play less. It shows what was open, not what the festival should have done.</p>
-      </section>
-
-      <section class="field grey" id="qloo" data-ink="dark" aria-labelledby="qloo-title">
-        <h2 id="qloo-title">Taste decides what gets saved</h2>
-        <div class="jobs jobs-short">
-          <article>
-            <h3>Who cannot be on at once</h3>
-            <p>Each act asks Qloo to rank every other act on the bill. Acts that rank each other high share a crowd, even across genres, comedy and podcasts.</p>
-          </article>
-          <article>
-            <h3>Which set to lose</h3>
-            <p>When a set must go, Qloo popularity says which. Without it, the same solver can drop a far bigger name.</p>
-          </article>
-          <article>
-            <h3>Why, in words you can check</h3>
-            <p>Qloo gives the tastes two crowds share. You can see the reason and overrule it.</p>
-          </article>
-        </div>
       </section>
 
       <section class="field light" id="questions" data-ink="dark" aria-labelledby="faq-title">

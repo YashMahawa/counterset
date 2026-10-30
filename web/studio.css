@@ -758,7 +758,7 @@ svg.threads path.drawing {
     stroke-dashoffset: 0;
   }
 }
-.grid.stamp .set {
+.grid.stamped .set {
   animation: settle 600ms var(--ease);
 }
 @keyframes settle {
@@ -2954,11 +2954,235 @@ button.big,
   width: 28%;
   font-weight: 500;
 }
-.qloo-card tr.differs td {
+.qloo-card tbody th {
+  color: #000;
+}
+.qloo-card tr.lead th,
+.qloo-card tr.lead td {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.qloo-card td.worse {
+  color: #b23a0d;
+}
+.qloo-card td.best {
+  background: #a7ff9c;
+}
+.qloo-card td:last-child {
+  padding-left: 10px;
+}
+.qloo-scroll {
+  overflow-x: auto;
+}
+.qloo-cost {
+  color: #000;
+}
+.qloo-card h3 {
+  margin: 20px 0 4px;
+  font-size: 1.125rem;
   font-weight: 600;
 }
-.qloo-card tr.differs td:last-child {
-  color: #b23a0d;
+.qloo-fair {
+  margin: 10px 0 0;
+  font-size: 0.9375rem;
+  color: #3c3e3f;
+}
+/* How hard the agent thinks: a three-stop slider, with a lane that runs at the chosen speed. */
+.think {
+  --fill: 100%;
+  --lap: 1s;
+  --car: 14%;
+  display: grid;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid #555;
+  color: #fff;
+}
+.think[data-level="medium"] {
+  --lap: 0.5s;
+  --car: 44%;
+}
+.think[data-level="low"] {
+  --lap: 0.22s;
+  --car: 74%;
+}
+.think-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ask .think-top label {
+  margin: 0;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.think-top strong {
+  color: #a7ff9c;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+.think input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.think input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  background: linear-gradient(to right, #a7ff9c var(--fill), #555 var(--fill));
+}
+.think input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -9px;
+  border: 0;
+  border-radius: 0;
+  background: #f4581f;
+}
+.think input[type="range"]::-moz-range-track {
+  height: 6px;
+  background: #555;
+}
+.think input[type="range"]::-moz-range-progress {
+  height: 6px;
+  background: #a7ff9c;
+}
+.think input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: #f4581f;
+}
+.think input[type="range"]:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.think[data-locked="true"] input[type="range"] {
+  cursor: not-allowed;
+}
+.think[data-locked="true"] input[type="range"]::-webkit-slider-thumb {
+  background: #9a9a9a;
+}
+.think[data-locked="true"] input[type="range"]::-moz-range-thumb {
+  background: #9a9a9a;
+}
+.think-stops {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: -4px;
+  font-size: 0.875rem;
+  color: #d8d8d8;
+}
+.think-stops span:nth-child(2) {
+  text-align: center;
+}
+.think-stops span:last-child {
+  text-align: right;
+}
+.think-show {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 12px;
+  font-size: 0.8125rem;
+  color: #d8d8d8;
+}
+.think-lane {
+  position: relative;
+  height: 28px;
+  margin-top: 3px;
+  overflow: hidden;
+  background: #222;
+}
+.think-road {
+  position: absolute;
+  top: 13px;
+  left: 0;
+  right: -40px;
+  height: 2px;
+  background: repeating-linear-gradient(to right, #fff 0 20px, transparent 20px 40px);
+  animation: think-road var(--lap) linear infinite;
+}
+.think-car {
+  position: absolute;
+  top: 6px;
+  left: var(--car);
+  width: 30px;
+  height: 16px;
+  background: #f4581f;
+  transition: left 0.5s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+@keyframes think-road {
+  to {
+    transform: translateX(-40px);
+  }
+}
+.think-depth {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  height: 28px;
+  margin-top: 3px;
+}
+.think-depth i {
+  background: #333;
+  transition: background-color 0.3s;
+}
+.think[data-level="low"] .think-depth i:nth-child(-n + 1),
+.think[data-level="medium"] .think-depth i:nth-child(-n + 2),
+.think[data-level="high"] .think-depth i {
+  background: #a7ff9c;
+  animation: think-pulse 1.1s ease-in-out infinite alternate;
+}
+.think-depth i:nth-child(2) {
+  animation-delay: 0.18s !important;
+}
+.think-depth i:nth-child(3) {
+  animation-delay: 0.36s !important;
+}
+@keyframes think-pulse {
+  to {
+    opacity: 0.45;
+  }
+}
+.think-say {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+  color: #f0f0f0;
+}
+.think .think-switch,
+.think .think-switch:hover:not(:disabled) {
+  justify-self: start;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #a7ff9c;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.think-switch[hidden] {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .think-road,
+  .think-depth i {
+    animation: none !important;
+  }
+  .think-car {
+    transition: none;
+  }
 }
 @media (max-width: 900px) {
   .lower {
@@ -3018,3 +3242,57 @@ a.watch-saved:hover {
   background: #fff;
 }
 
+.flow-plan > *,
+.flow-grid > * {
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .flow-plan {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.would-work {
+  margin: 20px 0 0;
+}
+.would-work h3,
+.in-the-way {
+  margin: 20px 0 8px;
+  font-size: 1.0625rem;
+}
+.would-work button {
+  display: flex;
+  width: 100%;
+  height: auto;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 8px;
+  padding: 14px 16px;
+  border: 1px solid #000;
+  background: #a7ff9c;
+  color: #000;
+  font-size: 1rem;
+  text-align: left;
+}
+.would-work button:hover:not(:disabled) {
+  background: #000;
+  color: #a7ff9c;
+}
+.would-work span {
+  flex: none;
+}
+@media (max-width: 560px) {
+  .would-work button {
+    display: block;
+  }
+  .would-work span {
+    display: block;
+    margin-top: 2px;
+  }
+}
+@media (max-width: 900px) {
+  .sheet {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

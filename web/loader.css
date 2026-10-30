@@ -80,13 +80,44 @@
     visibility: hidden;
   }
 }
-/* Arriving from another page: the mark is already whole, and the cover lifts. */
+/* Arriving from another page: the pieces settle, the orange set drops into its slot, and the cover lifts. */
 .loader-arrive .loader {
-  animation: loader-lift 0.5s cubic-bezier(0.76, 0, 0.24, 1) 0.28s forwards;
+  animation: loader-lift 0.5s cubic-bezier(0.76, 0, 0.24, 1) 0.5s forwards;
 }
-.loader-arrive .loader rect,
+.loader-arrive .loader rect {
+  animation-duration: 0.3s;
+}
+.loader-arrive .loader .l-top,
+.loader-arrive .loader .l-bottom {
+  animation-name: loader-settle-right;
+  animation-delay: 0s;
+}
+.loader-arrive .loader .l-left {
+  animation-name: loader-settle-left;
+  animation-delay: 0s;
+}
+.loader-arrive .loader .l-set {
+  animation-name: loader-settle-set;
+  animation-duration: 0.46s;
+  animation-delay: 0s;
+}
 .loader-arrive .loader span {
   animation: none;
+}
+@keyframes loader-settle-left {
+  from {
+    transform: translateX(-6px);
+  }
+}
+@keyframes loader-settle-right {
+  from {
+    transform: translateX(6px);
+  }
+}
+@keyframes loader-settle-set {
+  from {
+    transform: translateX(26px);
+  }
 }
 /* Leaving for another page: the cover rises and the mark assembles quickly. */
 .loader.leaving {
@@ -104,9 +135,16 @@
 .loader.leaving .l-bottom {
   animation-delay: 0.18s;
 }
+/* The next page may take a moment: the set keeps moving until it paints. */
 .loader.leaving .l-set {
-  animation-duration: 0.3s;
-  animation-delay: 0.2s;
+  animation:
+    loader-into-slot 0.3s cubic-bezier(0.3, 1.5, 0.5, 1) 0.2s both,
+    loader-shuttle 0.62s cubic-bezier(0.45, 0, 0.55, 1) 0.5s infinite alternate;
+}
+@keyframes loader-shuttle {
+  to {
+    transform: translateX(26px);
+  }
 }
 .loader.leaving span {
   animation: loader-word 0.2s ease-out 0.2s both;
@@ -119,6 +157,7 @@
 @media (prefers-reduced-motion: reduce) {
   .loader rect,
   .loader span,
+  .loader.leaving .l-set,
   .loader-arrive .loader rect,
   .loader-arrive .loader span {
     animation: none;

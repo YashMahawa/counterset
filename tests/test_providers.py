@@ -1,7 +1,7 @@
 import json
 import pytest
 from app.config import Config
-from app.providers import Gateway, ProviderError
+from app.providers import Gateway, ProviderError, backup_scope
 from app.agent import check_item, to_minutes
 from app.fixtures import demo
 
@@ -135,3 +135,74 @@ def test_when_every_key_fails_it_says_so(tmp_path, monkeypatch):
         gateway.model("x")
     assert set(used) == {"first", "second", "third"} and len(used) == 6
 
+
+
+def with_backup(tmp_path, monkeypatch, replies):
+    gateway, used = rotating(tmp_path, monkeypatch, replies)
+    gateway.cfg.backup_key = "paid"
+    return gateway, used
+
+
+def test_the_paid_key_answers_only_after_every_free_key_fails(tmp_path, monkeypatch):
+    gateway, used = with_backup(tmp_path, monkeypatch, [])
+    backup_scope("visitor", lambda: gateway.model("x"))()
+    assert used == ["first"]
+    gateway, used = with_backup(tmp_path, monkeypatch, [Reply(503) for _ in range(6)])
+    result, _ = backup_scope("visitor", lambda: gateway.model("x"))()
+    assert result == {} and used[-1] == "paid" and used.count("paid") == 1 and len(used) == 7
+
+
+def test_the_paid_key_never_answers_outside_a_visitors_live_run(tmp_path, monkeypatch):
+    gateway, used = with_backup(tmp_path, monkeypatch, [Reply(503) for _ in range(6)])
+    with pytest.raises(ProviderError, match="any of the 3 keys"):
+        gateway.model("x")
+    assert "paid" not in used
+
+
+def test_the_paid_key_stops_at_the_visitor_cap_then_the_server_cap(tmp_path, monkeypatch):
+    gateway, used = with_backup(tmp_path, monkeypatch, [])
+    gateway.cfg.model_key, gateway.cfg.extra_model_keys = "first", []
+    gateway.cfg.backup_per_visitor_hour = 2
+    gateway.cfg.backup_per_hour = 3
+    monkeypatch.setattr(gateway, "request", real_or_failing(gateway))
+    call = lambda who: backup_scope(who, lambda: gateway.model("x"))()
+    call("a")
+    call("a")
+    with pytest.raises(ProviderError, match="any of the 1 key"):
+        call("a")
+    call("b")
+    with pytest.raises(ProviderError, match="any of the 1 key"):
+        call("c")
+    assert used.count("paid") == 3
+
+
+def real_or_failing(gateway):
+    """Free keys always fail; the backup key goes through the real caps."""
+    real = gateway.request
+
+    def request(provider, path, **kw):
+        if provider == "model":
+            raise ProviderError("model returned HTTP 503; no action applied")
+        return real(provider, path, **kw)
+
+    return request
+
+
+def test_the_paid_key_expires_and_is_never_written_down(tmp_path, monkeypatch):
+    gateway, used = with_backup(tmp_path, monkeypatch, [Reply(503) for _ in range(6)])
+    result, _ = backup_scope("10.0.0.9", lambda: gateway.model("x"))()
+    log = (tmp_path / "calls.jsonl").read_text()
+    assert "paid" not in log and "10.0.0.9" not in log
+    gateway, used = with_backup(tmp_path, monkeypatch, [Reply(503) for _ in range(6)])
+    gateway.cfg.backup_until = 1
+    with pytest.raises(ProviderError):
+        backup_scope("visitor", lambda: gateway.model("x"))()
+    assert "paid" not in used
+
+
+def test_a_run_can_choose_how_hard_the_model_thinks(tmp_path, monkeypatch):
+    gateway, _ = rotating(tmp_path, monkeypatch, [])
+    _, telemetry = gateway.model("x", thinking="low")
+    assert telemetry["thinking"] == "low"
+    _, telemetry = gateway.model("x")
+    assert telemetry["thinking"] == gateway.cfg.thinking

@@ -307,3 +307,31 @@ Qloo was the only input that changed this repair, keeping Romy × Ethel Cain apa
 - Grids larger than 42 acts. The cap is 50.
 - Cross-kind coverage beyond the five tested people and three podcasts.
 - Stability over time. Order controls passed, which says nothing about drift.
+
+## Changed settings and follow-up prompts
+
+`scripts/settings_stress.py` runs the live agent with `gemini-3.5-flash-lite` at high thinking. It held the process to a tenth of a CPU core with one solver thread and 20 seconds per solve, to match the demo server. These are single runs on 31 October.
+
+The first version failed these settings. With Bonnaroo's message, a last finish of 01:00 and drops off, every try was refused as past the message's midnight stop, and three refusals ended the run with "The model kept calling tools incorrectly". The solver also gave its first pass one sixth of its time, so a tight day could report no schedule with most of the time unused. Both are fixed, and a settings test now covers the first.
+
+| Day | Settings or message | Time | Result |
+| --- | --- | ---: | --- |
+| Bonnaroo | Finish 01:00, no drops | 92 s | 28 of 28 play, 105 minutes shorter, 0 clashes |
+| Bonnaroo | No drops | 126 s | No plan by midnight. Offers finish by 02:00 (28 of 28) or drops (24 of 28) |
+| Bonnaroo | Shortest 85% | 107 s | 25 of 28 play, 40 minutes shorter, 0 clashes |
+| Bonnaroo | Full length only | 86 s | 24 of 28 play, 0 clashes |
+| Bonnaroo | Own message, stop at 1am | 81 s | 28 of 28 play, 45 minutes shorter, 0 clashes |
+| Bonnaroo | Message says keep every act at full length | 60 s | No plan by midnight. Offers finish by 02:00 (28 of 28) or drops (24 of 28) |
+| Outside Lands Sat | Finish 21:00 | 78 s | 14 of 14 play, 75 minutes shorter, 0 clashes |
+| Outside Lands Sat | Full length, no drops | 29 s | 14 of 14 play, 0 clashes |
+| Outside Lands Sat | Finish 20:00, full length, no drops | 33 s | No plan. Offers finish by 22:00 (14 of 14) or drops (11 of 14) |
+| Outside Lands Sat | Message says finish by 22:00, keep all acts, full length | 27 s | 14 of 14 play, 0 clashes |
+| Outside Lands Fri | Finish 21:00, full length, no drops | 38 s | No plan. Offers 60% sets (13 of 13) or finish by 22:00 (13 of 13) |
+| Lollapalooza | Finish 21:00, full length, no drops | 43 s | No plan. Offers 60% sets (21 of 21) or finish by 22:00 (21 of 21) |
+| Lollapalooza | Shortest 60% | 29 s | 21 of 21 play, 0 clashes |
+
+None of these runs failed, and code never had to finish a search. "No plan" here means the solver proved none fits, or found none in the time. Each offered change was solved before it was offered.
+
+Twenty follow-up prompts ran on one plan for each of two days, with each question starting from that plan: what changed and why, why one act moved, similar acts, why a pair shares a crowd, keep an act in its slot, move an act to a stage, an act's earliest start, no shortening, finish 30 minutes earlier, and an off-topic request to approve the plan. None failed. The median answer took 9 seconds and the slowest 52. One tool call was refused and the model recovered. The off-topic request was declined. These runs also found a bug, now fixed: keeping an act in its original slot could place it inside a closure. The Bonnaroo request to finish 30 minutes earlier could not be met, and the answer named the acts in the way.
+
+Not measured: how often live runs differ from one another, since each case ran once, and how a judge's own wording of a follow-up reads.

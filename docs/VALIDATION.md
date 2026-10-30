@@ -22,9 +22,11 @@ Three separate questions, answered separately:
 Real tools with a scripted model. Nothing in this file calls a provider.
 
 - **Proposal only:** a run produces a validated proposal and leaves the saved day untouched. Nothing changes until a person approves, including a closure, which stays on the proposal until then.
-- **Refusals:** a quote that is not an exact part of the message; an unknown tool; finishing before both comparisons have run; extending past the message's hard stop; closing the site on a day with no recorded closure.
+- **Refusals:** a quote that is not an exact part of the message; an unknown tool; finishing before both comparisons have run; closing the site on a day with no recorded closure.
 - **Invented numbers:** a summary with a number not in the tool results is replaced by a computed one, and the rejected text is kept.
-- **Bad calls:** three in a row stop the run. A text `"false"` does not open dropping sets.
+- **Settings:** a try outside the programmer's settings or past the example's hard stop runs inside them and says so. The programmer's finish outranks the message's. The same terms twice return the first answer.
+- **Bad calls:** three in a row hand the search to code, which ends in a plan if one fits. If the model read nothing, the run stops with nothing applied. A text `"false"` does not open dropping sets.
+- **Nothing fits:** the answer names a change the solver has just checked, and each choice carries the setting that runs it.
 - **Replay:** recorded decisions re-run every tool, then a person approves and a new version is saved. A changed message is refused.
 - **Failure:** a provider 503 fails the job visibly and applies nothing.
 - **Public mode:** workspaces are hidden, live Qloo is blocked and the agent is rate-capped.

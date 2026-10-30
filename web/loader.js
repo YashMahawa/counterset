@@ -1,5 +1,5 @@
 // The opening plays on every load. Moving between pages covers the screen with the same mark,
-// and the next page lifts it away, so the switch reads as one movement. The page never waits on it.
+// and the next page settles it and lifts it away, so the switch reads as one movement. The page never waits on it.
 (() => {
   const root = document.documentElement;
   try {
@@ -31,6 +31,7 @@
     try {
       sessionStorage.setItem("counterset-moving", "1");
     } catch {}
+    root.classList.remove("loader-arrive");
     replay("leaving");
     setTimeout(() => location.assign(to.href), COVER);
   });

@@ -58,6 +58,8 @@ const S = {
   publishing: false,
   // What the person set in the try box. Left alone, a template day plays its saved run.
   limits: { shortest: "", curfew: "", drop: true },
+  thinking: null,
+  forceLive: false,
   // Below the timetable: which list shows, and the conversation with the agent.
   lower: "changes",
   allChanges: false,
@@ -231,10 +233,13 @@ const nextButton = (done) => (S.step < STEPS.length - 1 ? `<button class="${done
 // ---------- Steps ----------
 // Each step answers one question: the finding says the answer in a sentence, the panel holds
 // the work for that step, and the side column shows the evidence for whatever is selected.
+// The model counts rescues from zero and the steps count tries from one. A person sees one count.
+const tryWords = (text) => text.replace(/\b[Rr]escue (\d+)\b/g, (_, n) => `try ${+n + 1}`);
 const TOOL_WORDS = {
   close_site: "Closed the site",
   close_stage: "Closed a stage",
   limit_act: "Recorded an act's limit",
+  limit_terms: "Recorded a rule for the whole day",
   audit: "Checked the grid",
   try_rescue: "Tried a rescue",
   compare_without_qloo: "Solved it again without Qloo",
@@ -276,7 +281,7 @@ function traceList() {
       return `<li class="${t.ok ? "" : "refused"} ${shown === t.n ? "on" : ""}">
         <div class="trace-head"><strong>${esc(label)}</strong><small>${esc(t.tool)} · ${t.seconds}s</small></div>
         <p class="trace-line">${esc(t.line)}</p>
-        ${t.thought ? `<p class="trace-why">${esc(t.thought)}</p>` : ""}
+        ${t.thought ? `<p class="trace-why">${esc(tryWords(t.thought))}</p>` : ""}
         ${canShow ? `<button class="link" data-action="view" data-view="step${t.n}">Show on the timetable</button>` : ""}
       </li>`;
     })
@@ -716,14 +721,21 @@ function reviewList(note) {
     )
     .join("")}</tbody></table>
   ${pending && live ? `<div class="row"><button class="primary" data-action="review" data-note="${esc(note.id)}">Apply ticked changes</button></div>` : pending ? `<p class="fine">The day changed after this message was read. Read it again to review.</p>` : ""}
-  <p class="fine">The controller checked every item: exact quote, known act or stage, valid time.</p>`;
+  <p class="fine">The controller checked every item: exact quote, known act or stage, valid time. Rescue terms go into the repair form and do not change the day.</p>`;
 }
 function describe(it) {
   if (it.action === "stage_hold") return `${stage(it.stage_id).name} on hold ${tm(it.start)}–${tm(it.end)}`;
   if (it.action === "not_before") return `${act(it.act_id).name} starts no earlier than ${tm(it.value)}`;
   if (it.action === "finish_by") return `${act(it.act_id).name} finishes by ${tm(it.value)}`;
   if (it.action === "lock") return `Keep ${act(it.act_id).name} where it is`;
-  if (it.action === "unsupported") return "Needs a person: not a schedule constraint";
+  if (it.action === "rescue_term") {
+    const parts = [];
+    if (it.curfew !== undefined) parts.push(`last set ends by ${tm(it.curfew)}`);
+    if (it.shortest !== undefined) parts.push(it.shortest >= 100 ? "full-length sets only" : `sets may shrink to ${it.shortest}%`);
+    if (it.allow_cut !== undefined) parts.push(it.allow_cut ? "sets may be dropped" : "no set is dropped");
+    return `Rescue terms: ${parts.join(", ")}`;
+  }
+  if (it.action === "unsupported") return "Not applied: this one needs you";
   return "Rejected by the controller";
 }
 function sampleMessage() {
@@ -783,14 +795,67 @@ const SAVED_DAY = "bonnaroo-2026-sunday";
 const MODEL_WORDS = { "gemini-3.8-flash": "Gemini 3.8 Flash", "gemini-3.5-flash-lite": "Gemini 3.5 Flash Lite" };
 const modelName = (m) => MODEL_WORDS[m] || m || "the model";
 const limitsUntouched = () => !S.limits.shortest && !S.limits.curfew && S.limits.drop;
-const usesSavedRun = (text) => hasRecording() && text === S.project.context.recorded_run.message && limitsUntouched();
+const usesSavedRun = (text) => !S.forceLive && hasRecording() && text === S.project.context.recorded_run.message && limitsUntouched();
+const thinkLevel = () => S.thinking || S.config.thinking || "high";
+const LEVELS = ["low", "medium", "high"];
+const levelWord = (l) => l[0].toUpperCase() + l.slice(1);
+const THINK_SAY = { low: "Quickest. The model checks its work the least.", medium: "In between.", high: "Slowest. The model checks its work the most." };
+function thinkRead(level) {
+  const m = S.config.thinking_measured?.[level];
+  return m ? `Measured here: about ${m.seconds} seconds a run and ${m.tokens.toLocaleString("en-US")} tokens. ${m.clean} of ${m.runs} test runs ended with no clashes.` : "";
+}
+function thinkLocked() {
+  const r = S.project.context.recorded_run;
+  return `This stays on ${esc(r.thinking || "high")}: saved runs were all recorded at ${esc(r.thinking || "high")} thinking and play back as they were.`;
+}
+function thinkForm(typed) {
+  const saved = usesSavedRun(typed);
+  const level = saved ? S.project.context.recorded_run.thinking || "high" : thinkLevel();
+  return `<div class="think" id="think" data-level="${level}" data-locked="${saved}">
+    <div class="think-top"><label for="think-level">How hard the agent thinks</label><strong id="think-word">${levelWord(level)}</strong></div>
+    <input type="range" id="think-level" min="0" max="2" step="1" value="${LEVELS.indexOf(level)}" aria-valuetext="${levelWord(level)}" ${saved ? "disabled" : ""} />
+    <div class="think-stops" aria-hidden="true">${LEVELS.map((l) => `<span>${levelWord(l)}</span>`).join("")}</div>
+    <div class="think-show" aria-hidden="true">
+      <div><span>Speed</span><div class="think-lane"><i class="think-road"></i><i class="think-car"></i></div></div>
+      <div><span>Checking</span><div class="think-depth"><i></i><i></i><i></i></div></div>
+    </div>
+    <p class="think-say" id="think-say">${saved ? thinkLocked() : `${esc(THINK_SAY[level])} ${esc(thinkRead(level))}`}</p>
+    ${hasRecording() && S.config.model_configured ? `<button type="button" class="link think-switch" data-action="think-live" id="think-switch">${saved ? "Run it live and choose the level" : S.forceLive ? "Back to the saved run" : ""}</button>` : ""}
+  </div>`;
+}
+function setThink(level) {
+  const box = $("#think");
+  if (!box) return;
+  box.dataset.level = level;
+  box.style.setProperty("--fill", `${LEVELS.indexOf(level) * 50}%`);
+  $("#think-word").textContent = levelWord(level);
+  const input = $("#think-level");
+  input.value = LEVELS.indexOf(level);
+  input.setAttribute("aria-valuetext", levelWord(level));
+}
+function syncThink(text) {
+  const box = $("#think");
+  if (!box) return;
+  const saved = usesSavedRun(text);
+  const level = saved ? S.project.context.recorded_run.thinking || "high" : thinkLevel();
+  box.dataset.locked = String(saved);
+  $("#think-level").disabled = saved;
+  $("#think-say").innerHTML = saved ? thinkLocked() : `${esc(THINK_SAY[level])} ${esc(thinkRead(level))}`;
+  const sw = $("#think-switch");
+  if (sw) {
+    sw.textContent = saved ? "Run it live and choose the level" : S.forceLive ? "Back to the saved run" : "";
+    sw.hidden = !sw.textContent;
+  }
+  setThink(level);
+}
 function limitsSent() {
-  return { shortest: +S.limits.shortest || null, curfew: +S.limits.curfew || null, allow_drop: S.limits.drop ? null : false };
+  return { shortest: +S.limits.shortest || null, curfew: +S.limits.curfew || null, allow_drop: S.limits.drop ? (S.limits.dropChosen ? true : null) : false };
 }
 function limitsForm() {
   const end = Math.max(...day().stages.map((s) => s.closes));
   const times = [];
   for (let t = end - 120; t <= end + 120; t += 30) times.push(t);
+  if (+S.limits.curfew && !times.includes(+S.limits.curfew)) times.push(+S.limits.curfew);
   const short = [["", "Agent decides"], ["100", "Full length only"], ["85", "85% of its time"], ["75", "75% of its time"], ["60", "60% of its time"]];
   return `<div class="limits">
     <label>Shortest a set can get<select id="lim-short">${short.map(([v, w]) => `<option value="${v}" ${S.limits.shortest === v ? "selected" : ""}>${w}</option>`).join("")}</select></label>
@@ -802,9 +867,10 @@ function askNote(text) {
   if (!S.config.model_configured && !hasRecording()) return "No model is set up on this server.";
   if (usesSavedRun(text)) {
     const r = S.project.context.recorded_run;
-    return `Saved run: no live calls and no cost. Recorded with ${modelName(r.model)}. Change the words, an option or the lineup for a live run.`;
+    return `Saved run: no live calls and no cost. Recorded with ${modelName(r.model)} at ${r.thinking || "high"} thinking. Change the words, an option or the lineup for a live run.`;
   }
-  return "Live run: the model decides each step now. It takes a minute or two.";
+  const m = S.config.thinking_measured?.[thinkLevel()];
+  return `Live run on ${modelName(S.config.models?.[0])} at ${thinkLevel()} thinking: the model decides each step now.${m ? ` Takes about a minute here.` : ""}`;
 }
 // A failure says so plainly and always leaves something to watch: a saved run made real calls once.
 function failBox(title, reason, after) {
@@ -825,6 +891,7 @@ function askForm() {
     <textarea id="agent-message" rows="${Math.min(8, Math.max(4, Math.ceil(typed.length / 58) + 1))}" placeholder="Main stage is closed 18:00 to 19:00. Curfew is 23:00.">${esc(typed)}</textarea>
     ${a?.error ? failBox("The live run failed", a.error, "Nothing on your timetable changed.") : ""}
     ${limitsForm()}
+    ${thinkForm(typed)}
     <div class="ask-foot"><button class="primary big" id="ask-go" ${offline ? "disabled" : ""}>${usesSavedRun(typed) ? "Play the saved run" : "Fix this day"}</button>${S.retrying || S.again ? `<button type="button" class="ask-cancel" data-action="cancel-edit">Cancel</button>` : ""}<span class="hint"><kbd>Enter</kbd> starts it. Nothing changes until you approve.</span></div>
     <p class="fine" id="ask-note">${esc(askNote(typed))}</p>
   </form>`;
@@ -848,17 +915,18 @@ function flowRunning() {
   const trace = S.agent?.trace || [];
   const last = trace.at(-1);
   return `<div class="flow-run">
-    <p class="eyebrow">${S.agent?.mode === "live" ? "Live run: the model is deciding now" : `Saved run, recorded with ${esc(modelName(S.project.context?.recorded_run?.model))}. No live calls.`}</p>
+    <p class="eyebrow">${S.agent?.mode === "live" ? `Live run at ${esc(S.agent.thinking)} thinking: the model is deciding now` : `Saved run, recorded with ${esc(modelName(S.project.context?.recorded_run?.model))} at ${esc(S.project.context?.recorded_run?.thinking || "high")} thinking. No live calls.`}</p>
     ${headline("Working on it")}
-    <p class="flow-say">${last?.thought ? esc(last.thought) : "Reading what you wrote…"}</p>
+    <p class="flow-say">${last?.thought ? esc(tryWords(last.thought)) : "Reading what you wrote…"}</p>
     <ol class="live-steps">${trace.map((t) => `<li class="${t.ok ? "" : "refused"}"><strong>${esc(TOOL_WORDS[t.tool] || "Tried a step")}</strong> ${esc(t.line)}</li>`).join("")}<li class="now"><span class="spin" aria-hidden="true"></span>${trace.length ? "Next step…" : "Starting…"}</li></ol>
   </div>`;
 }
 function planSource() {
   const p = S.proposal;
   if (p.changed_by_ask) return "New plan from your request";
-  if (p.mode === "live") return `Live run with ${esc(modelName(p.model))}`;
-  return `Saved run, recorded with ${esc(modelName(p.model))}. No live calls`;
+  const at = p.thinking ? ` at ${esc(p.thinking)} thinking` : "";
+  if (p.mode === "live") return `Live run with ${esc(modelName(p.model))}${at}`;
+  return `Saved run, recorded with ${esc(modelName(p.model))}${at}. No live calls`;
 }
 // What Qloo did for this plan, from the same solve run with every Qloo signal removed.
 const popularity = (id) => (act(id).draw == null ? "" : ` (Qloo popularity ${Math.round(act(id).draw * 100)})`);
@@ -880,6 +948,7 @@ function qlooLine(o) {
   if (blind.identical) return "On this problem the same plan comes out without Qloo.";
   return "Without Qloo the plan differs but leaves no extra clash.";
 }
+const clashCount = (x) => x.conflicts.filter((c) => c.source === "qloo" || c.source === "must_see").length;
 function flowPlan() {
   const o = finalOption();
   const a = o.audit;
@@ -893,12 +962,14 @@ function flowPlan() {
       <p class="eyebrow">${planSource()} · nothing has changed yet</p>
       ${headline(lost ? `${total - lost} of ${total} sets play.` : `All ${total} sets play.`, `${left ? plural(left, "clash", "clashes") : "No clashes"} left.`)}
       <ul class="tally">
-        <li><strong>${before} → ${left}</strong> clashes</li>
+        <li><strong>${before} → ${left}</strong> clashes with Qloo</li>
+        ${o.without_qloo?.audit ? `<li><strong>${before} → ${clashCount(o.without_qloo.audit)}</strong> without Qloo</li>` : ""}
         <li><strong>${a.moves}</strong> ${a.moves === 1 ? "set moves" : "sets move"}</li>
         <li><strong>${a.trim_minutes}</strong> minutes shorter</li>
         <li><strong>${lost}</strong> dropped${ran ? `, ${ran.cuts.length} on the real day` : ""}</li>
       </ul>
       <p class="flow-say">${qlooLine(o)}</p>
+      ${S.proposal.by_code ? `<p class="fine">${esc(S.proposal.by_code)} Code finished the search with the same solver and the same checks, so the plan stands, and the words here are the solver's, not the model's.</p>` : ""}
     </div>
     <div class="flow-decide">
       <button class="primary big" data-action="publish" data-option="0" id="approve">Approve this plan</button>
@@ -907,12 +978,21 @@ function flowPlan() {
     </div>
   </div>`;
 }
+// Each choice was solved before it was offered, so none of them can lead back to "no plan".
+function wouldWork() {
+  const list = S.proposal.what_would_work || [];
+  if (!list.length) return "";
+  return `<div class="would-work"><h3>What would work</h3>
+    ${list.map((w, i) => `<button type="button" data-action="use-fix" data-i="${i}"><strong>${esc(w.change)}</strong><span>${esc(w.outcome)}</span></button>`).join("")}
+    <p class="fine">The solver just checked each of these. Choosing one runs the agent again with that change.</p></div>`;
+}
 function flowNoPlan() {
   return `<div class="flow-grid"><div class="flow-left">
     ${headline("No plan fits.")}
     <p class="flow-say">${esc(S.proposal.summary)}</p>
-    ${(S.proposal.core || []).slice(0, 4).map((c) => `<p class="note bad">${esc(c)}</p>`).join("")}
-    <p class="fine">Nothing has changed. Change what went wrong, or the lineup, and try again.</p>
+    ${wouldWork()}
+    ${(S.proposal.core || []).length ? `<h3 class="in-the-way">What stands in the way</h3>${S.proposal.core.slice(0, 4).map((c) => `<p class="note bad">${esc(c)}</p>`).join("")}` : ""}
+    <p class="fine">Nothing has changed. ${S.proposal.what_would_work?.length ? "Or change the settings or what went wrong yourself, and run it again." : "Change what went wrong, or the lineup, and try again."}</p>
   </div>${askForm()}</div>`;
 }
 function flowSent() {
@@ -923,8 +1003,9 @@ function flowSent() {
     <div class="flow-decide"><button data-action="again">Something else went wrong</button></div>
   </div>`;
 }
+const busyMark = () => `<svg class="busy-mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="14" height="6" /><rect x="2" y="9" width="8" height="6" /><rect class="logo-set" x="11" y="9" width="11" height="6" /><rect x="2" y="16" width="14" height="6" /></svg>`;
 function flowLoading() {
-  return `<div class="flow-run"><p class="eyebrow">${esc(day().name)}</p>${headline("Reading this day")}<p class="flow-say">${esc(S.loading)}</p></div>`;
+  return `<div class="flow-run"><p class="eyebrow">${esc(day().name)}</p>${busyMark()}${headline("Reading this day")}<p class="flow-say">${esc(S.loading)}</p></div>`;
 }
 function flowProblem() {
   return `<div class="flow-run"><p class="eyebrow">${esc(day().name)}</p>${headline("Qloo could not read this day yet.")}<p class="flow-say">${esc(S.problem)}</p>
@@ -955,7 +1036,13 @@ function renderFlow() {
     const showRunKind = () => {
       $("#ask-note").textContent = askNote(box.value);
       $("#ask-go").textContent = usesSavedRun(box.value) ? "Play the saved run" : "Fix this day";
+      syncThink(box.value);
     };
+    $("#think-level").oninput = (e) => {
+      S.thinking = LEVELS[+e.target.value];
+      showRunKind();
+    };
+    syncThink(box.value);
     box.oninput = () => {
       S.typed.agent = box.value;
       showRunKind();
@@ -1107,12 +1194,12 @@ function askPanel() {
       <button class="primary" ${S.asking || off ? "disabled" : ""}>Ask</button>
     </form>
     ${S.asking || off ? "" : `<div class="ask-chips">${askSuggestions(finalOption()).map((q) => `<button type="button" data-action="ask-chip" data-text="${esc(q)}">${esc(q)}</button>`).join("")}</div>`}
-    <p class="lower-foot">${off ? "No model is set up on this server." : `Questions always run live on ${esc(modelName(S.config.models?.[0]))}.`}</p>
+    <p class="lower-foot">${off ? "No model is set up on this server." : `Questions always run live on ${esc(modelName(S.config.models?.[0]))} at ${esc(thinkLevel())} thinking.`}</p>
   </section>`;
 }
 function qlooVerdict(o) {
   const { blind, prot, lost, kept } = qlooCompare(o);
-  if (prot.length) return `Without Qloo, ${plural(prot.length, "more pair")} that share a crowd would play at the same time.`;
+  if (prot.length) return `Without Qloo, ${plural(prot.length, "pair")} that share a crowd would play at the same time. With Qloo, none of them do.`;
   if (lost.length && kept.length) return `Both plans play the same number of sets. Qloo changes who goes: without it, a far bigger crowd loses its set.`.replace("a far bigger crowd loses its set", lost.every((id) => kept.every((k) => (act(id).draw ?? 0) > (act(k).draw ?? 0))) ? "a bigger crowd loses its set" : "a different act loses its set");
   if (blind.identical) return "Qloo changes nothing on this problem. The same plan comes out without it, because nothing that shares a crowd was at risk.";
   return "On this problem Qloo leaves the plan no better on clashes or drops. Only the details differ.";
@@ -1123,18 +1210,24 @@ function qlooCard() {
   const b = o.without_qloo?.audit;
   if (!b) return "";
   const total = day().acts.length;
-  const clashes = (x) => x.conflicts.filter((c) => c.source === "qloo" || c.source === "must_see").length;
+  const start = S.project.audit;
   const lost = (x) => (x.cuts.length ? x.cuts.map((id) => `${esc(act(id).name)}${popularity(id)}`).join(", ") : "Nobody");
+  const showsBlind = o.without_qloo.placements && !o.without_qloo.identical;
   const rows = [
-    ["Sets that play", `${total - a.cuts.length} of ${total}`, `${total - b.cuts.length} of ${total}`],
-    ["Dropped", lost(a), lost(b)],
-    ["Clashes left", clashes(a), clashes(b)],
-    ["Minutes shortened", a.trim_minutes, b.trim_minutes],
-    ["Sets moved", a.moves, b.moves],
+    ["Clashes", clashCount(start), clashCount(b), clashCount(a), "lead"],
+    ["Dropped", "Nobody", lost(b), lost(a)],
+    ["Sets that play", `${total} of ${total}`, `${total - b.cuts.length} of ${total}`, `${total - a.cuts.length} of ${total}`],
+    ["Sets moved", "None", b.moves, a.moves],
+    ["Minutes shortened", 0, b.trim_minutes, a.trim_minutes],
   ];
+  const cost = [];
+  if (a.moves > b.moves) cost.push(`${plural(a.moves - b.moves, "more set moves", "more sets move")} with Qloo`);
+  if (a.trim_minutes > b.trim_minutes) cost.push(`${a.trim_minutes - b.trim_minutes} more minutes come off sets with Qloo`);
+  const pairs = clashCount(b) ? `<h3>The pairs without Qloo</h3>${clashList(b)}<p class="qloo-fair">Qloo decides who shares a crowd, so read each reason and overrule any you disagree with.</p>` : "";
   return `<section class="qloo-card">
-    <div class="qloo-card-head"><div><h2>What Qloo changed</h2><p>${esc(qlooVerdict(o))}</p></div>${o.without_qloo.placements && !o.without_qloo.identical ? `<button data-action="view" data-view="blind0">See it without Qloo</button>` : ""}</div>
-    <table><thead><tr><th></th><th>With Qloo</th><th>Without Qloo</th></tr></thead><tbody>${rows.map(([k, x, y]) => `<tr class="${String(x) === String(y) ? "" : "differs"}"><th>${k}</th><td>${x}</td><td>${y}</td></tr>`).join("")}</tbody></table>
+    <div class="qloo-card-head"><div><h2>What Qloo changed</h2><p>${esc(qlooVerdict(o))}</p>${cost.length ? `<p class="qloo-cost"><strong>What it costs:</strong> ${esc(cost.join(", and "))}.</p>` : ""}</div>${showsBlind ? `<button data-action="view" data-view="${S.view === "blind0" ? "opt0" : "blind0"}">${S.view === "blind0" ? "See it with Qloo" : "See it without Qloo"}</button>` : ""}</div>
+    <div class="qloo-scroll"><table><thead><tr><th></th><th>Before</th><th>Without Qloo</th><th>With Qloo</th></tr></thead><tbody>${rows.map(([k, x, y, z, lead]) => `<tr class="${lead || ""}"><th>${k}</th><td>${x}</td><td class="${lead && y > z ? "worse" : ""}">${y}</td><td class="${lead && y > z ? "best" : ""}">${z}</td></tr>`).join("")}</tbody></table></div>
+    ${pairs}
   </section>`;
 }
 async function askAgent(raw) {
@@ -1146,7 +1239,7 @@ async function askAgent(raw) {
   S.typed.ask = "";
   renderAfter("plan");
   try {
-    const start = await api(`/proposals/${S.proposal.proposal_id || S.proposal.id}/ask`, "POST", { text });
+    const start = await api(`/proposals/${S.proposal.proposal_id || S.proposal.id}/ask`, "POST", { text, thinking: thinkLevel() });
     for (let n = 0; n < 600; n++) {
       await new Promise((res) => setTimeout(res, 500));
       const j = await api(`/jobs/${start.job_id}`);
@@ -1526,8 +1619,9 @@ function viewList() {
   if (current())
     S.proposal.options.forEach((o, i) => {
       if (!o.placements?.length || o.same_as !== undefined) return;
-      views.push([`opt${i}`, S.proposal.agent ? (simple() ? "After" : "Agent's rescue") : `Option ${letter(i)}`]);
-      if (o.without_qloo?.placements && !o.without_qloo.identical) views.push([`blind${i}`, S.proposal.agent ? "Without Qloo" : `${letter(i)} without Qloo`]);
+      const blind = o.without_qloo?.placements && !o.without_qloo.identical;
+      if (blind) views.push([`blind${i}`, S.proposal.agent ? "Without Qloo" : `${letter(i)} without Qloo`]);
+      views.push([`opt${i}`, S.proposal.agent ? (simple() ? (blind ? "With Qloo" : "After") : "Agent's rescue") : `Option ${letter(i)}`]);
     });
   return views;
 }
@@ -1545,7 +1639,7 @@ function renderViews() {
       : views.map(([v, label]) => `<button role="tab" class="${v.startsWith("blind") ? "blind" : ""}" data-action="view" data-view="${v}" aria-selected="${v === S.view}">${label}</button>`).join("");
   const note = $("#view-note");
   const shown = S.view.startsWith("blind") && S.proposal?.agent && finalOption() ? qlooVerdict(finalOption()) : "";
-  note.textContent = shown ? `Without Qloo: ${shown}` : "";
+  note.textContent = shown;
   note.hidden = !shown;
   const on = $('#views [aria-selected="true"]');
   if (on) {
@@ -1684,6 +1778,7 @@ async function openProject(id) {
   S.again = false;
   S.retrying = false;
   S.limits = { shortest: "", curfew: "", drop: true };
+  S.forceLive = false;
   S.lower = "changes";
   S.allChanges = false;
   S.fullSummary = false;
@@ -2073,6 +2168,13 @@ function select(sel) {
 
 // ---------- Actions ----------
 const actions = {
+  "use-fix": (t) => {
+    const fix = S.proposal.what_would_work[+t.dataset.i].settings;
+    if ("allow_drop" in fix) Object.assign(S.limits, { drop: true, dropChosen: true });
+    if (fix.shortest) S.limits.shortest = String(fix.shortest);
+    if (fix.curfew) S.limits.curfew = String(fix.curfew);
+    return actions.agent({ dataset: { mode: "live" } });
+  },
   agent: async (t) => {
     const mode = t.dataset.mode;
     const text = mode === "replay" ? S.project.context.recorded_run.message : $("#agent-message")?.value || sampleMessage();
@@ -2080,7 +2182,7 @@ const actions = {
     S.again = false;
     S.retrying = false;
     say("");
-    S.agent = { trace: [], mode, message: text };
+    S.agent = { trace: [], mode, message: text, thinking: thinkLevel() };
     S.agentRunning = true;
     S.proposal = null;
     S.view = "draft";
@@ -2088,7 +2190,7 @@ const actions = {
     S.step = stepIndex("agent");
     render();
     try {
-      const start = await api(`/projects/${S.project.id}/agent`, "POST", { version: S.project.version, text, mode, ...(mode === "live" ? { limits: limitsSent() } : {}) });
+      const start = await api(`/projects/${S.project.id}/agent`, "POST", { version: S.project.version, text, mode, ...(mode === "live" ? { limits: limitsSent(), thinking: thinkLevel() } : {}) });
       let seen = 0;
       for (let n = 0; n < 900; n++) {
         await new Promise((res) => setTimeout(res, 500));
@@ -2212,6 +2314,20 @@ const actions = {
   edit: (t) => editDialog(t.dataset.act),
   hold: holdDialog,
   act: (t) => select(S.selected?.act === t.dataset.act ? null : { act: t.dataset.act }),
+  "think-live": () => {
+    const box = $("#agent-message");
+    S.typed.agent = box.value;
+    S.forceLive = !S.forceLive;
+    if (!S.forceLive) {
+      S.typed.agent = S.project.context.recorded_run.message;
+      box.value = S.typed.agent;
+      S.limits = { shortest: "", curfew: "", drop: true };
+      $("#lim-short").value = "";
+      $("#lim-end").value = "";
+      $("#lim-drop").checked = true;
+    }
+    box.oninput();
+  },
   pair: (t) => {
     select({ pair: [t.dataset.a, t.dataset.b] });
     $(simple() ? "#flow-detail" : "#inspector").scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" });
@@ -2244,10 +2360,20 @@ const actions = {
     const boxes = $$("[data-review-index]");
     const decisions = boxes.filter((b) => !b.disabled).map((b) => ({ index: +b.dataset.reviewIndex, approve: b.checked }));
     if (!decisions.length) return say("Nothing to apply.");
-    await api(`/projects/${S.project.id}/messages/review`, "POST", { version: S.project.version, note_id: t.dataset.note, decisions });
+    const note = await api(`/projects/${S.project.id}/messages/review`, "POST", { version: S.project.version, note_id: t.dataset.note, decisions });
     S.view = "draft";
     await reload();
-    say(decisions.some((d) => d.approve) ? "Applied as a new version. Sets that now break a rule are striped." : "Declined. Nothing changed.");
+    // Whole-day rules are the terms of the next repair, so they go into its form and stay visible there.
+    const set = decisions.filter((d) => d.approve).map((d) => note.items[d.index]);
+    const term = set.filter((it) => it.action === "rescue_term");
+    if (term.length) {
+      const now = terms();
+      S.terms = { ...now, ...Object.assign({}, ...term.map(({ curfew, shortest, allow_cut }) => ({ ...(curfew !== undefined && { curfew }), ...(shortest !== undefined && { shortest }), ...(allow_cut !== undefined && { allow_cut }) }))) };
+      S.rescueOpen = true;
+      render();
+    }
+    const left = note.items.filter((it) => it.action === "unsupported").length;
+    say(`${term.length ? "Rescue terms set: find them under Repair. " : ""}${set.length > term.length ? "Applied as a new version. Sets that now break a rule are striped. " : ""}${set.length ? "" : "Declined. Nothing changed. "}${left ? `${left} ${left === 1 ? "line needs" : "lines need"} you: ${left === 1 ? "it was" : "they were"} not applied.` : ""}`);
   },
   repair: async () => {
     const t = readTerms();
@@ -2268,9 +2394,18 @@ const actions = {
     } else say(r.status === "INFEASIBLE" ? "No schedule satisfies every rule. See the conflicting constraints." : r.core_scope, true);
   },
   brief: async () => {
-    const out = await job(`/proposals/${S.proposal.proposal_id || S.proposal.id}/briefing`, { model: "gemini-3.5-flash-lite" }, "The agent is briefing from the computed options…");
-    S.proposal.briefing = out;
-    renderInspector();
+    // The person can approve or leave while this runs. It belongs to the plan it was asked about.
+    const asked = S.proposal;
+    let out;
+    try {
+      out = await job(`/proposals/${asked.proposal_id || asked.id}/briefing`, { model: "gemini-3.5-flash-lite" }, "The agent is briefing from the computed options…");
+    } catch (e) {
+      // Approving first makes the briefing pointless, not an error.
+      if (S.proposal === asked) throw e;
+      return;
+    }
+    asked.briefing = out;
+    if (S.proposal === asked) renderInspector();
   },
   keep: async (t) => {
     await api(`/projects/${S.project.id}/pin`, "POST", { version: S.project.version, act_id: t.dataset.act });
@@ -2282,6 +2417,8 @@ const actions = {
   publish: async (t) => {
     // A slow server invites a second press. Only the first one counts.
     if (S.publishing || !S.proposal) return;
+    // The answer on its way may be a new plan. Approving under it would approve the wrong one.
+    if (S.asking) return say("The agent is still answering. Approve once it has finished.", true);
     S.publishing = true;
     const pid = S.proposal.proposal_id || S.proposal.id;
     const label = t.textContent;
@@ -2302,8 +2439,8 @@ const actions = {
     } finally {
       S.publishing = false;
     }
-    $("#grid").classList.add("stamp");
-    setTimeout(() => $("#grid").classList.remove("stamp"), 800);
+    $("#grid").classList.add("stamped");
+    setTimeout(() => $("#grid").classList.remove("stamped"), 800);
     S.step = stepIndex("approve");
     S.again = false;
     render();

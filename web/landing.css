@@ -1066,7 +1066,6 @@ details code {
 .watch-run {
   display: grid;
   gap: 8px;
-  min-height: 190px;
   margin-top: 16px;
   padding: 16px;
   background: #fff;
@@ -1092,6 +1091,9 @@ details code {
   font-size: var(--step-body);
   line-height: 1.4;
 }
+.watch-thought {
+  min-height: 2.8em;
+}
 .watch-line {
   font-weight: 500;
 }
@@ -1100,4 +1102,304 @@ details code {
 .filming .readout,
 .filming .fallback {
   display: none;
+}
+
+/* ---------- before, without Qloo, with Qloo ---------- */
+.storm-link {
+  display: inline-block;
+  margin-left: 16px;
+  font-weight: 600;
+  color: inherit;
+}
+.proof-lede {
+  margin: 16px 0 32px;
+  max-width: 62ch;
+  font-size: var(--step-lead);
+  line-height: 1.3;
+}
+.proof {
+  margin-bottom: 48px;
+}
+.proof-days {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.proof-days button {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 2px solid #000;
+  border-radius: 0;
+  background: transparent;
+  color: #000;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.proof-days strong {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.proof-days span {
+  font-size: var(--step-small);
+}
+.proof-days button:hover,
+.proof-days button[aria-pressed="true"] {
+  background: #000;
+  color: #fff;
+}
+.proof-problem {
+  margin: 24px 0;
+  padding-left: 14px;
+  border-left: 6px solid var(--orange);
+  max-width: 80ch;
+  font-size: var(--step-lead);
+  line-height: 1.3;
+}
+.proof-problem span {
+  display: block;
+  font-size: var(--step-small);
+  font-weight: 600;
+}
+.proof-problem q {
+  quotes: none;
+}
+.proof-states {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.proof-state {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.proof-state span {
+  font-weight: 600;
+}
+.proof-state strong {
+  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 3.25rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+.proof-state small {
+  font-size: var(--step-small);
+}
+.proof-state.bad strong {
+  color: #c43c0a;
+}
+.proof-state[aria-pressed="true"] {
+  background: #000;
+  color: #fff;
+}
+.proof-state[aria-pressed="true"].bad strong {
+  color: var(--orange);
+}
+.proof-state[aria-pressed="true"].none strong {
+  color: var(--mint);
+}
+.proof-state:hover:not([aria-pressed="true"]) {
+  background: #efefef;
+}
+.proof-wrap {
+  margin-top: 8px;
+  overflow-x: auto;
+  background: #fff;
+  padding: 8px 0;
+}
+.proof-board {
+  position: relative;
+}
+.p-tick,
+.p-name,
+.p-tile,
+.p-lane,
+.p-closed {
+  position: absolute;
+  font-size: var(--step-small);
+}
+.p-tick {
+  top: 0;
+  color: #333;
+}
+.p-lane {
+  left: 0;
+  right: 0;
+  background: #f2f2f2;
+}
+.p-name {
+  left: 0;
+  z-index: 3;
+  width: 80px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  background: #fff;
+  font-weight: 600;
+  line-height: 1.05;
+}
+.p-closed {
+  background: repeating-linear-gradient(135deg, #bbb 0 4px, #e6e6e6 4px 8px);
+}
+.p-tile {
+  top: 0;
+  left: 0;
+  z-index: 2;
+  padding: 4px 6px;
+  overflow: hidden;
+  background: #d8d8d8;
+  color: #000;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.1;
+  transition: transform 560ms var(--ease), width 560ms var(--ease), background-color 240ms, opacity 240ms;
+}
+.p-tile.moved {
+  background: var(--mint);
+}
+.p-tile.clash {
+  background: var(--orange);
+}
+.p-tile.blocked {
+  background: #000;
+  color: #fff;
+}
+.p-tile.clash.blocked {
+  background: var(--orange);
+  color: #000;
+  box-shadow: inset 0 0 0 3px #000;
+}
+.p-tile.dropped {
+  background: #fff;
+  color: #000;
+  box-shadow: inset 0 0 0 2px #000;
+  text-decoration: line-through;
+}
+.p-tile.dim {
+  opacity: 0.22;
+}
+.proof-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 10px 0 0;
+  font-size: var(--step-small);
+}
+.proof-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.proof-key i {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.k-clash {
+  background: var(--orange);
+}
+.k-moved {
+  background: var(--mint);
+  box-shadow: inset 0 0 0 1px #000;
+}
+.k-blocked {
+  background: #000;
+}
+.k-closed {
+  background: repeating-linear-gradient(135deg, #888 0 3px, #eee 3px 6px);
+}
+.proof-below {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 32px;
+  margin-top: 28px;
+}
+.proof-below h3 {
+  margin: 0 0 10px;
+  font-size: var(--step-lead);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.proof-pairs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.proof-pairs li + li {
+  margin-top: 6px;
+}
+.proof-pairs button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.proof-pairs button:hover {
+  background: #efefef;
+}
+.proof-pairs button[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px #000;
+}
+.proof-pairs strong {
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+.proof-pairs em {
+  justify-self: start;
+  padding: 1px 6px;
+  background: var(--orange);
+  color: #000;
+  font-size: var(--step-small);
+  font-style: normal;
+  font-weight: 600;
+}
+.proof-pairs span {
+  font-size: 0.9375rem;
+  line-height: 1.3;
+}
+.proof-side p {
+  margin: 0 0 24px;
+}
+@media (max-width: 860px) {
+  .storm-link {
+    display: block;
+    margin: 14px 0 0;
+  }
+  .proof-days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .proof-states {
+    gap: 4px;
+  }
+  .proof-state {
+    padding: 10px;
+  }
+  .proof-state strong {
+    font-size: 1.375rem;
+  }
+  .proof-below {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .p-tile {
+    transition: none;
+  }
 }

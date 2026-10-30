@@ -64,7 +64,7 @@ message → close_site / close_stage / limit_act (exact quote required) → audi
 → why_they_share_a_crowd → finish → a person approves
 ```
 
-Controller rules: a quote must be an exact part of the message; a curfew may not pass the stated hard stop; `finish` is refused until the comparisons have run; three refused calls in a row stop the run with nothing applied; a summary containing a number absent from the tool results is replaced by a computed one, with the reason recorded.
+Controller rules: a quote must be an exact part of the message; a try is held inside the programmer's settings, then the rules the message sets for the whole day, then the example's stated hard stop, in that order, and the model is told what was corrected; the same terms twice return the first answer; `finish` is refused until the comparisons have run; after three refused calls in a row, running out of steps, a provider failure or giving up, code finishes the remaining tries with the same solver, unless the model never read the problem, which stops the run with nothing applied; when nothing fits, code loosens one setting at a time and reports what the solver found; a summary containing a number absent from the tool results is replaced by a computed one, with the reason recorded.
 
 A finished run is a proposal carrying its own day (the closures and rescue terms) and the hash of the day it started from. Publishing re-checks the hash and re-runs the validator. Models cannot call Qloo, produce placements, approve or publish.
 

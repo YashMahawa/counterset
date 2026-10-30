@@ -96,15 +96,106 @@ def test_agent_summary_with_an_invented_number_is_replaced():
     assert out["summary_source"] == "deterministic" and "4000" not in out["summary"] and "4000" in out["summary_rejected"]
 
 
-def test_agent_may_not_extend_past_the_stated_hard_stop():
+def limited(decisions, limits, message=MESSAGE, context=CONTEXT, shape=None):
+    return desk_agent.run(shape or day(), EVIDENCE, context, message, None, "m", turns=decisions, seconds=4, limits=limits)
+
+
+def test_agent_is_held_to_the_stated_hard_stop():
     over = {"tool": "try_rescue", "args": {"curfew": "20:00", "shortest_percent": 100, "allow_drop": False}}
-    out = run([GOOD[0], over, *GOOD[2:]])
-    assert not out["trace"][1]["ok"] and "hard stop" in out["trace"][1]["line"]
+    out = run([GOOD[0], over, *GOOD[3:]], {**CONTEXT, "sample_message": MESSAGE})
+    assert out["trace"][1]["ok"] and "hard stop" in json.dumps(out["trace"][1]["result"]["notes"])
+    assert out["session"].rescues[0]["scenario"]["curfew"] == 1140
 
 
-def test_agent_stops_cleanly_after_repeated_bad_calls():
+def test_a_rewritten_message_is_not_held_to_the_examples_hard_stop():
+    over = {"tool": "try_rescue", "args": {"curfew": "20:00", "shortest_percent": 100, "allow_drop": False}}
+    out = run([GOOD[0], over, *GOOD[3:]])
+    assert out["session"].rescues[0]["scenario"]["curfew"] == 1200
+
+
+def test_the_programmers_finish_outranks_the_messages_hard_stop():
+    out = limited(GOOD, {"curfew": 1200}, context={**CONTEXT, "sample_message": MESSAGE})
+    assert all(t["ok"] for t in out["trace"])
+    assert out["session"].rescues[0]["scenario"]["curfew"] == 1200 and out["rescue_id"] == 0
+
+
+def test_a_try_the_settings_rule_out_is_corrected_not_refused():
+    wild = {"tool": "try_rescue", "args": {"shortest_percent": 60, "allow_drop": True}}
+    out = limited([GOOD[0], wild, *GOOD[3:]], {"shortest": 85, "allow_drop": False})
+    assert out["trace"][1]["ok"]
+    assert out["session"].rescues[0]["scenario"] == {"shortest": 85, "allow_cut": False}
+    assert "85 percent" in out["trace"][1]["line"] or "85" in json.dumps(out["trace"][1]["result"])
+
+
+def test_the_same_terms_twice_return_the_first_answer():
+    again = {"tool": "try_rescue", "args": {"shortest_percent": 100, "allow_drop": True}}
+    out = limited([GOOD[0], GOOD[2], again, again, again, *GOOD[3:]], {"allow_drop": False})
+    assert all(t["ok"] for t in out["trace"]) and len(out["session"].rescues) == 1
+    assert out["rescue_id"] == 0
+
+
+def test_a_model_that_keeps_stumbling_still_ends_in_a_plan():
+    bad = {"tool": "nope", "args": {}}
+    out = run([GOOD[0], bad, bad, bad])
+    assert out["by_code"] and out["rescue_id"] is not None
+    assert out["summary_source"] == "deterministic" and not out["summary_rejected"]
+    assert any(t.get("by_code") for t in out["trace"])
+    assert out["rescue_id"] in out["session"].compared
+
+
+def test_a_model_that_reads_nothing_stops_without_a_plan():
     with pytest.raises(desk_agent.AgentStop):
         run([{"tool": "nope", "args": {}}] * 3)
+
+
+def test_giving_up_early_does_not_lose_a_plan_the_settings_allow():
+    tight = day().model_dump()
+    for a in tight["acts"]:
+        a["earliest"], a["latest"] = 780, 1140
+    close = {"tool": "close_site", "args": {"start": "14:00", "end": "18:50", "quote": "Site closed 14:00 to 15:00."}}
+    first = {"tool": "try_rescue", "args": {"shortest_percent": 100, "allow_drop": False}}
+    quit = {"tool": "report_conflict", "args": {"summary": "Nothing fits."}}
+    out = limited([close, first, quit], {}, shape=Day.model_validate(tight))
+    assert out["rescue_id"] is not None and out["by_code"]
+    assert out["session"].rescues[out["rescue_id"]]["result"]["placements"]
+
+
+def test_a_rule_in_the_message_holds_every_try_and_the_code_search():
+    quote = "Save what you can."
+    say = {"tool": "limit_terms", "args": {"shortest_percent": 100, "allow_drop": False, "quote": quote}}
+    close = {"tool": "close_site", "args": {"start": "14:00", "end": "18:50", "quote": "Site closed 14:00 to 15:00."}}
+    wild = {"tool": "try_rescue", "args": {"shortest_percent": 60, "allow_drop": True}}
+    quit = {"tool": "report_conflict", "args": {"summary": "Nothing fits."}}
+    out = limited([say, close, wild, quit], {})
+    assert out["session"].rescues[0]["scenario"] == {"shortest": 100, "allow_cut": False}
+    assert out["rescue_id"] is None and len(out["session"].rescues) == 1
+    assert out["what_would_work"][0]["settings"] == {"allow_drop": True}
+
+
+def test_a_setting_outranks_a_rule_in_the_message():
+    say = {"tool": "limit_terms", "args": {"shortest_percent": 100, "allow_drop": False, "quote": "Save what you can."}}
+    wild = {"tool": "try_rescue", "args": {"shortest_percent": 60, "allow_drop": True}}
+    close = {"tool": "close_site", "args": {"start": "14:00", "end": "18:50", "quote": "Site closed 14:00 to 15:00."}}
+    out = limited([say, close, wild, *GOOD[3:]], {"allow_drop": True, "shortest": 60})
+    assert out["session"].rescues[0]["scenario"] == {"shortest": 60, "allow_cut": True}
+
+
+def test_midnight_may_be_written_as_24_00():
+    from app.agent import to_minutes
+
+    assert to_minutes(day(), "24:00") == 1440
+
+
+def test_when_nothing_fits_it_says_what_would_work():
+    close = {"tool": "close_site", "args": {"start": "14:00", "end": "18:50", "quote": "Site closed 14:00 to 15:00."}}
+    first = {"tool": "try_rescue", "args": {"shortest_percent": 100, "allow_drop": False}}
+    quit = {"tool": "report_conflict", "args": {"summary": "Nothing fits."}}
+    out = limited([close, first, quit], {"allow_drop": False, "shortest": 100})
+    assert out["rescue_id"] is None
+    assert out["what_would_work"] and out["what_would_work"][0]["change"] == "Let sets be dropped"
+    assert out["what_would_work"][0]["change"] in out["summary"]
+    proposal = desk_agent.to_proposal(out, day())
+    assert proposal["no_plan"] and proposal["what_would_work"]
 
 
 def ready(tmp_path, public=False, recorded=False):
@@ -420,7 +511,7 @@ def test_agent_can_end_honestly_when_nothing_fits_and_cannot_repeat_itself():
         {"tool": "report_conflict", "args": {"summary": "Act 0 is locked inside the closure."}},
     ]
     out = desk_agent.run(d, EVIDENCE, {}, MESSAGE, None, "m", turns=decisions, seconds=3)
-    assert not out["trace"][2]["ok"] and "already tried" in out["trace"][2]["line"]
+    assert out["trace"][2]["ok"] and "try 1" in json.dumps(out["trace"][2]["result"]["notes"])
     assert out["rescue_id"] is None and out["core"]
     proposal = desk_agent.to_proposal(out, d)
     assert proposal["no_plan"] and proposal["options"] == [] and proposal["core"]
@@ -619,8 +710,8 @@ def test_asking_for_a_change_makes_a_new_plan_that_still_waits(tmp_path):
     c, app, cfg = ready(tmp_path)
     p, pid = planned(c, app, cfg)
     act = day().acts[0]
-    start = day().draft[0]
-    change = {"thought": "solve", "tool": "change_plan", "args": {"rules": [{"type": "not_before", "act_id": act.id, "time": f"{(start.start + 15) // 60:02}:{(start.start + 15) % 60:02}"}]}}
+    here = next(x for x in c.get(f"/api/projects/{p['id']}").json()["proposals"][0]["options"][0]["placements"] if x["act_id"] == act.id)["stage_id"]
+    change = {"thought": "solve", "tool": "change_plan", "args": {"rules": [{"type": "avoid_stage", "act_id": act.id, "stage_id": here}]}}
     j = ask(c, app, pid, [change, {"thought": "offer", "tool": "propose_plan", "args": {"plan_id": 0, "answer": "Done. It starts later now."}}], text="Start it later")
     assert j["status"] == "COMPLETED", j
     new = j["result"]["proposal_id"]
@@ -630,6 +721,27 @@ def test_asking_for_a_change_makes_a_new_plan_that_still_waits(tmp_path):
     assert fresh["id"] == new and fresh["parent"] == pid and fresh["changed_by_ask"] and fresh["trace"]
     pub = c.post(f"/api/projects/{p['id']}/publish", headers=H, json={"version": 1, "proposal_id": new, "option": 0})
     assert pub.status_code == 200, pub.text
+
+
+def test_the_old_slot_cannot_be_restored_inside_a_closure():
+    from app import ask_agent
+    from app.repair import hold_stage
+
+    d = hold_stage(day(), "a", 840, 900, "Closed")
+    act = next(p.act_id for p in d.draft if p.stage_id == "a" and p.start < 900 and p.start + 60 > 840)
+    place = [{"act_id": p.act_id, "stage_id": p.stage_id, "start": p.start} for p in d.draft]
+    session = ask_agent.AskSession({"day": d.model_dump(), "options": [{"placements": place, "audit": {}}]}, EVIDENCE, "q", None, 2, lambda: None)
+    with pytest.raises(ValueError, match="inside the closure"):
+        session.change_plan({"rules": [{"type": "keep_original", "act_id": act}]})
+
+
+def test_a_request_the_plan_already_meets_is_an_answer(tmp_path):
+    c, app, cfg = ready(tmp_path)
+    p, pid = planned(c, app, cfg)
+    same = {"thought": "solve", "tool": "change_plan", "args": {"rules": []}}
+    j = ask(c, app, pid, [same, {"thought": "offer", "tool": "propose_plan", "args": {"plan_id": 0, "answer": "It already does."}}], text="Keep it as it is")
+    assert j["status"] == "COMPLETED", j
+    assert "proposal_id" not in j["result"] and j["result"]["answer"] == "It already does."
 
 
 def test_a_rule_that_cannot_hold_changes_nothing(tmp_path):
@@ -653,9 +765,7 @@ def test_asks_are_capped_per_visitor(tmp_path):
 def test_the_programmers_limits_bind_the_agent():
     session = desk_agent.Session(day(), EVIDENCE, {}, MESSAGE, {"shortest": 85, "allow_drop": False, "curfew": 1380})
     session.called, session.tool_results = [], []
-    with pytest.raises(ValueError, match="85 percent"):
-        session.try_rescue({"shortest_percent": 75, "allow_drop": True})
-    session.try_rescue({"shortest_percent": 85, "allow_drop": True, "curfew": "23:30"})
+    session.try_rescue({"shortest_percent": 75, "allow_drop": True, "curfew": "23:30"})
     assert session.rescues[0]["scenario"] == {"shortest": 85, "allow_cut": False, "curfew": 1380}
 
 
@@ -678,3 +788,36 @@ def test_a_curfew_keeps_an_acts_own_hours():
 def test_the_number_check_reads_times_joined_by_a_dash():
     assert {"17:20", "19:05"} <= desk_agent.numbers_in(json.dumps({"x": "Yard Act: available 17:20–19:05"}, ensure_ascii=False))
 
+
+
+def test_thinking_must_be_one_of_three_levels_and_the_comparison_shows_three_states(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.config import Config
+
+    cfg = Config(root=tmp_path)
+    cfg.private = tmp_path
+    (tmp_path / "web").mkdir(exist_ok=True)
+    client = TestClient(create_app(cfg))
+    r = client.post("/api/projects/none/agent", headers={"x-counterset": "workspace"}, json={"version": 1, "text": "x", "mode": "live", "thinking": "extreme"})
+    assert r.status_code == 422 and "thinking" in r.text
+    proof = client.get("/api/qloo-proof")
+    assert proof.status_code == 200 and "qloo_id" not in proof.text
+    for d in proof.json()["days"]:
+        assert {"before", "without", "with"} <= set(d)
+
+
+def test_the_comparison_is_built_from_the_saved_runs():
+    from pathlib import Path
+    import pytest
+    from app.examples import Examples
+    from app import proof
+
+    folder = Path(".private/examples")
+    if not folder.exists():
+        pytest.skip("Saved runs are private")
+    days = proof.build(Examples(folder))["days"]
+    assert days[0]["id"].startswith("lollapalooza") and len(days) == 4
+    for d in days:
+        assert len(d["without"]["clashes"]) > len(d["with"]["clashes"]) == 0
+        assert all(c["why"] for c in d["without"]["clashes"])
