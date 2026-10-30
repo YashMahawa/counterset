@@ -4,7 +4,7 @@ import json
 import time
 import pytest
 from fastapi.testclient import TestClient
-from app import desk_agent
+from app import desk_agent, lineup
 from app.config import Config
 from app.domain import Day
 from app.main import create_app
@@ -436,3 +436,82 @@ def test_a_set_that_finished_before_a_closure_does_not_block_it():
     x0 = next(a for a in d.acts if a.id == "x0")
     assert x0.locked and x0.changeover == 0
     assert not [e for e in recount(d, d.draft, [])["errors"] if "Act 0" in e]
+
+
+EDITED = "Main | Mitski | 20:30 | 21:30\nMain | Djo | 19:00 | 20:00\nTent | Ali Wong | 19:30 | 20:15 | comedy"
+
+
+def test_editing_a_lineup_keeps_what_a_person_confirmed_and_round_trips(tmp_path):
+    day = lineup.parse("Mine", EDITED)
+    day.acts[0].qloo_id = "11111111-2222-3333-4444-555555555555"
+    day.acts[0].locked = True
+    text = lineup.text_of(day)
+    assert "Tent | Ali Wong | 19:30 | 20:15 | comedy" in text
+    place = lambda d: sorted(d.model_dump()["draft"], key=lambda x: x["act_id"])
+    assert place(lineup.parse("Mine", text)) == place(day)
+    new = lineup.revise(day, text + "\nTent | Yard Act | 21:00 | 21:45")
+    kept = {a.name: a for a in new.acts}
+    assert kept["Mitski"].qloo_id == "11111111-2222-3333-4444-555555555555" and kept["Mitski"].locked and kept["Yard Act"].qloo_id is None
+    c, app, cfg = ready(tmp_path, public=True)
+    p = c.post("/api/lineups", headers=H, json={"name": "Mine", "text": EDITED}).json()
+    assert c.get(f"/api/projects/{p['id']}/lineup").json()["text"].count("\n") == 2
+    edited = c.put(f"/api/projects/{p['id']}/lineup", headers=H, json={"version": 1, "name": "Renamed", "text": EDITED + "\nTent | Yard Act | 21:00 | 21:45"})
+    assert edited.status_code == 200 and edited.json()["day"]["name"] == "Renamed" and len(edited.json()["day"]["acts"]) == 4
+    example = c.post("/api/examples/mini", headers=H).json()
+    assert c.put(f"/api/projects/{example['id']}/lineup", headers=H, json={"version": 1, "text": EDITED}).status_code == 403
+
+
+def test_a_spreadsheet_heading_row_is_skipped():
+    day = lineup.parse("Mine", "stage,act,start,end\nMain,Mitski,20:30,21:30\nMain,Djo,19:00,20:00")
+    assert [a.name for a in day.acts] == ["Mitski", "Djo"]
+
+
+def test_a_browser_can_restore_its_own_day_but_not_a_larger_one(tmp_path):
+    c, app, cfg = ready(tmp_path, public=True)
+    p = c.post("/api/lineups", headers=H, json={"name": "Mine", "text": EDITED}).json()
+    back = c.post("/api/lineups/restore", headers=H, json=p["day"])
+    assert back.status_code == 200 and back.json()["context"]["kind"] == "own" and back.json()["id"] != p["id"]
+    big = lineup.parse("Big", "\n".join(f"Main | Act {i} | {10 + i // 2:02}:{30 * (i % 2):02} | {10 + i // 2:02}:{30 * (i % 2) + 20:02}" for i in range(24))).model_dump()
+    big["acts"].append({**big["acts"][0], "id": "extra", "name": "Extra"})
+    big["draft"].append({"act_id": "extra", "stage_id": big["stages"][0]["id"], "start": 1300})
+    assert c.post("/api/lineups/restore", headers=H, json=big).status_code == 422
+
+
+def test_every_route_that_spends_the_model_key_is_capped_per_visitor(tmp_path, monkeypatch):
+    c, app, cfg = ready(tmp_path, public=True)
+    cfg.model_key = "secret-model-key"
+    cfg.model_tasks_per_hour = 2
+    monkeypatch.setattr(app.state.gateway, "model", lambda *a, **k: (_ for _ in ()).throw(ProviderError("down")))
+    p = c.post("/api/examples/mini", headers=H).json()
+    body = {"version": 1, "text": "Stage closed.", "model": "gemini-3.5-flash-lite"}
+    assert c.post(f"/api/projects/{p['id']}/messages", headers=H, json=body).status_code == 200
+    assert c.post(f"/api/projects/{p['id']}/messages", headers=H, json=body).status_code == 200
+    assert c.post(f"/api/projects/{p['id']}/messages", headers=H, json=body).status_code == 429
+    assert c.post(f"/api/projects/{p['id']}/messages", headers=H, json={**body, "model": "someone-elses-model"}).status_code == 422
+    baseline = {"version": 1, "move_budget": 2, "seconds": 1, "model": "gemini-3.5-flash-lite"}
+    assert c.post(f"/api/projects/{p['id']}/benchmark", headers=H, json=baseline).status_code == 429
+
+
+def test_a_visitor_cannot_escape_a_cap_with_a_forged_address(tmp_path):
+    c, app, cfg = ready(tmp_path, public=True)
+    cfg.qloo_key = "secret-qloo-key"
+    cfg.qloo_per_hour = 1
+    search = {"query": "Mitski", "kind": "artist"}
+    limited = lambda **h: c.post("/api/resolve", headers={**H, **h}, json=search).status_code == 429
+    app.state.gateway.qloo = lambda *a, **k: ({"results": {"entities": []}}, "test")
+    assert not limited()
+    assert limited(**{"X-Forwarded-For": "1.2.3.4"})
+    assert limited(**{"CF-Connecting-IP": "1.2.3.4"})  # no edge is named, so this header means nothing
+    cfg.client_ip_header = "cf-connecting-ip"
+    assert not limited(**{"CF-Connecting-IP": "5.6.7.8"})
+    assert limited(**{"CF-Connecting-IP": "5.6.7.8", "X-Forwarded-For": "9.9.9.9"})
+
+
+def test_a_hand_made_repair_drafts_messages_when_approved(tmp_path):
+    c, app, cfg = ready(tmp_path)
+    p = c.post("/api/examples/mini", headers=H).json()
+    body = {"version": 1, "move_budget": 6, "seconds": 3, "scenario": {"curfew": 1140, "shortest": 75, "allow_cut": True}}
+    j = finish(c, c.post(f"/api/projects/{p['id']}/repair", headers=H, json=body).json()["job_id"])
+    pub = c.post(f"/api/projects/{p['id']}/publish", headers=H, json={"version": 1, "proposal_id": j["result"]["proposal_id"], "option": 0}).json()
+    versions = c.get(f"/api/projects/{p['id']}").json()["versions"]
+    assert versions[0]["notices"] == pub["notices"]

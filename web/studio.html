@@ -5,30 +5,30 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Counterset — rescue desk</title>
     <link rel="preload" href="/web/assets/albert-sans.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/web/studio.css?v=5" />
+    <link rel="stylesheet" href="/web/bar.css?v=1" />
+    <link rel="stylesheet" href="/web/studio.css?v=6" />
     <link rel="icon" href="/web/assets/icon.svg" type="image/svg+xml" />
-    <script src="/web/studio.js?v=7" type="module"></script>
+    <script src="/web/studio.js?v=8" type="module"></script>
   </head>
   <body data-mode="walk">
     <a class="skip" href="#grid">Skip to the timetable</a>
-    <header class="top">
-      <a class="mark" href="/" aria-label="Counterset home">
-        <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><rect x="1" y="3" width="8" height="5" rx="1.5" /><rect x="11" y="12" width="8" height="5" rx="1.5" /><path d="M5 8v2.5a2 2 0 0 0 2 2h4" fill="none" stroke-width="1.6" /></svg>
+    <header class="top bar">
+      <a class="brand" href="/" aria-label="Counterset home">
+        <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="14" height="6" /><rect x="2" y="9" width="8" height="6" /><rect class="logo-set" x="12" y="9" width="7" height="6" /><rect x="8" y="16" width="14" height="6" /></svg>
         <span>Counterset</span>
       </a>
-      <button id="open-day" class="day-switch" aria-haspopup="dialog">
-        <strong id="day-name">Loading…</strong>
-        <span id="day-meta"></span>
-      </button>
+      <a class="days-link" href="/studio">Your days</a>
+      <span class="day-now"><strong id="day-name"></strong><span id="day-meta"></span></span>
       <div class="top-end">
         <span id="budget-stamp" class="stamp"></span>
         <div class="mode" role="group" aria-label="Interface mode">
           <button id="mode-walk" aria-pressed="true">Guided</button
           ><button id="mode-desk" aria-pressed="false">Desk</button>
         </div>
-        <button id="own-lineup" class="own">Try your own lineup</button>
+        <a id="own-lineup" class="bar-cta" href="/studio?lineup=1">New day</a>
         <button id="tools" class="quiet" aria-haspopup="menu" aria-expanded="false">Tools</button>
         <div id="tools-menu" class="menu" role="menu" hidden>
+          <button role="menuitem" id="edit-lineup">Edit the lineup</button>
           <button role="menuitem" id="edit-json">Edit facts (JSON)</button>
           <label role="menuitem" class="menu-file">Import a day<input type="file" id="import" accept="application/json" /></label>
           <button role="menuitem" id="compare">Compare evidence</button>
@@ -39,7 +39,32 @@
       </div>
     </header>
 
-    <main class="sheet">
+    <main class="home" id="home" hidden>
+      <section class="new-day" aria-labelledby="new-title">
+        <h1 id="new-title">Start a new day</h1>
+        <p>Paste your festival day, one set per line: stage, act, start, end. Add comedy, podcast or talk as a last column for other kinds of act. Spreadsheet rows work too.</p>
+        <form id="new-form">
+          <label>Name of the day<input id="l-name" value="My festival" maxlength="100" required /></label>
+          <label>Lineup<textarea id="l-text" rows="13" spellcheck="false" required></textarea></label>
+          <div class="new-actions">
+            <button class="primary" id="l-go">Look up these acts in Qloo</button>
+            <label class="file-button">Choose a CSV file<input type="file" id="l-file" accept=".csv,.tsv,.txt,text/csv,text/plain" /></label>
+          </div>
+          <p class="status error" id="new-error" role="alert"></p>
+        </form>
+        <p class="fine">A sample is filled in, so you can press the button straight away. It uses real acts on an invented grid. Up to 24 sets on this server.</p>
+        <p class="fine">Act names go to Qloo, and anything you give the agent goes to Google's Gemini API, through keys held on the server. Do not paste anything confidential.</p>
+      </section>
+      <section class="your-days" aria-labelledby="days-title">
+        <h2 id="days-title">Your days</h2>
+        <div id="days-list"></div>
+        <h2>Worked examples</h2>
+        <div id="examples-list" class="choices"></div>
+        <label class="file-button quiet-file">Import a saved day<input type="file" id="import-home" accept="application/json" /></label>
+      </section>
+    </main>
+
+    <main class="sheet" id="sheet">
       <nav id="steps" class="steps" aria-label="Steps"></nav>
 
       <div class="title-row">

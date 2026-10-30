@@ -233,25 +233,10 @@ function startStages() {
 
 // ---------- Motion ----------
 function startMotion() {
-  // The bar takes the ink of the chapter under it.
-  const bar = $("#bar");
-  const chapters = [...document.querySelectorAll("[data-ink]")];
-  const ink = () => {
-    const at = chapters.find((c) => {
-      const r = c.getBoundingClientRect();
-      return r.top <= 28 && r.bottom > 28;
-    });
-    bar.classList.toggle("light", at?.dataset.ink === "light");
-    // The bar takes the flat colour of the chapter too, so words never sit on words.
-    const bg = at ? getComputedStyle(at).backgroundColor : "";
-    bar.style.setProperty("--bar-bg", !bg || bg === "rgba(0, 0, 0, 0)" ? "#fff" : bg);
-  };
-  addEventListener("scroll", ink, { passive: true });
-  ink();
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   // Each section's parts rise in turn, once. Content is only hidden once script is running.
   const parts = document.querySelectorAll(
-    "section h2:not(.visually-hidden), .replay-top p, .replay, .assume, .plain, blockquote, .lede, .jobs article, .fine, .tile, .mosaic figure, .faq details, .end, .stage-ui, #stage-say, .stage-rail, .places, .foot-notes",
+    "section h2:not(.visually-hidden), .start-text p, .journey, .start-form, .replay-top p, .replay, .assume, .plain, blockquote, .lede, .jobs article, .fine, .tile, .mosaic figure, .faq details, .end, .stage-ui, #stage-say, .stage-rail, .places, .foot-notes",
   );
   const seen = new IntersectionObserver(
     (entries) => {
@@ -274,7 +259,33 @@ function startMotion() {
   });
 }
 
+// ---------- Your own day ----------
+function startForm() {
+  const form = $("#start-form");
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const button = $("button", form);
+    const error = $("#start-error");
+    error.textContent = "";
+    button.disabled = true;
+    try {
+      const r = await fetch("/api/lineups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Counterset": "workspace" },
+        body: JSON.stringify({ name: $("#start-name").value, text: $("#start-text").value }),
+      });
+      const out = await r.json().catch(() => ({}));
+      if (!r.ok) throw Error(typeof out.detail === "string" ? out.detail : "That did not work. Check the lines and try again.");
+      location.href = `/studio?project=${encodeURIComponent(out.id)}&identify=1`;
+    } catch (err) {
+      error.textContent = err.message;
+      button.disabled = false;
+    }
+  };
+}
+
 startMotion();
+startForm();
 startStages();
 names(null);
 startLive().then((list) => list && names(list));

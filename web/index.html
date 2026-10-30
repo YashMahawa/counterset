@@ -7,20 +7,25 @@
     <title>Counterset — the rescue desk for festival days</title>
     <link rel="icon" href="/web/assets/icon.svg" type="image/svg+xml" />
     <link rel="preload" href="/web/assets/albert-sans.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/web/landing.css?v=7" />
-    <script src="/web/landing.js?v=7" defer></script>
+    <link rel="stylesheet" href="/web/bar.css?v=1" />
+    <link rel="stylesheet" href="/web/landing.css?v=8" />
+    <script src="/web/landing.js?v=8" defer></script>
   </head>
   <body>
-    <header class="bar" id="bar">
-      <a class="word" href="/">Counterset</a>
-      <nav aria-label="Page">
-        <a href="#replay">Try it</a>
+    <header class="bar">
+      <a class="brand" href="/">
+        <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="14" height="6" /><rect x="2" y="9" width="8" height="6" /><rect class="logo-set" x="12" y="9" width="7" height="6" /><rect x="8" y="16" width="14" height="6" /></svg>
+        <span>Counterset</span>
+      </a>
+      <nav class="bar-links" aria-label="Page">
+        <a href="#start">Your day</a>
+        <a href="#replay">The storm</a>
         <a href="#agent">The agent</a>
         <a href="#qloo">Why Qloo</a>
-        <a href="/studio?lineup=1">Your own lineup</a>
         <a href="#questions">Questions</a>
+        <a href="/studio">Your days</a>
       </nav>
-      <a class="bar-action" href="/studio?day=bonnaroo-2026-sunday&amp;watch=1">Watch the agent</a>
+      <a class="bar-cta" href="#start">Start with your lineup</a>
     </header>
 
     <main>
@@ -28,16 +33,47 @@
         <h1 id="title"><span class="pale">A storm took</span> <span>11 sets.</span></h1>
         <div class="storm-foot">
           <div class="storm-action">
-            <a class="button" href="/studio?day=bonnaroo-2026-sunday&amp;watch=1">Watch the agent rebuild that day</a>
-            <a class="text" href="/studio?lineup=1">Or try your own lineup</a>
+            <a class="button" href="#start">Start with your lineup</a>
+            <a class="text" href="/studio?day=bonnaroo-2026-sunday&amp;watch=1">Or watch it rebuild that day</a>
           </div>
           <p class="storm-say">Bonnaroo, 14 June 2026. Counterset is a rescue agent for festival programmers. It rebuilds a broken day around what fans share, using Qloo, and a person approves.</p>
         </div>
       </section>
 
+      <section class="field mint start" id="start" data-ink="dark" aria-labelledby="start-title">
+        <div class="start-text">
+          <h2 id="start-title">Bring your own day</h2>
+          <p>Paste a festival day. In a few minutes you have a timetable that knows who shares a crowd, and a desk ready for when it breaks.</p>
+          <ul class="journey">
+            <li><strong>Read it.</strong> Qloo finds each act and ranks who shares a crowd, live.</li>
+            <li><strong>Fix it.</strong> See every clash on your timetable, and drag a set to fix one.</li>
+            <li><strong>Rescue it.</strong> Tell the agent what went wrong. It tries fixes and the solver checks each one.</li>
+            <li><strong>Send it.</strong> Approve the plan, share the timetable and send each act its message.</li>
+          </ul>
+        </div>
+        <form class="start-form" id="start-form" action="/studio" method="get">
+          <input type="hidden" name="lineup" value="1" />
+          <label>Name of the day<input id="start-name" value="My festival" maxlength="100" required /></label>
+          <label>Lineup: stage, act, start, end<textarea id="start-text" rows="12" spellcheck="false" required>Lands End | Lucy Dacus | 16:00 | 16:50
+Lands End | Ethel Cain | 17:20 | 18:20
+Lands End | Djo | 18:50 | 19:50
+Lands End | The Strokes | 20:35 | 21:55
+Twin Peaks | Dijon | 17:30 | 18:30
+Twin Peaks | The xx | 20:10 | 21:25
+Sutro | Yard Act | 16:20 | 17:05
+Sutro | Snow Strippers | 17:35 | 18:20
+Sutro | PinkPantheress | 20:45 | 21:45
+Comedy Tent | Nate Bargatze | 18:00 | 18:45 | comedy
+Comedy Tent | Ali Wong | 19:00 | 19:45 | comedy</textarea></label>
+          <button class="button">Build my day</button>
+          <p class="start-error" id="start-error" role="alert"></p>
+          <p class="fine">A sample is filled in, so you can press the button straight away. It uses real acts on an invented grid. Replace it with your own lines, or paste rows from a spreadsheet. No account needed.</p>
+        </form>
+      </section>
+
       <section class="field night" id="replay" data-ink="light" aria-labelledby="replay-title">
         <div class="replay-top">
-          <h2 id="replay-title">Try it: could more sets have played?</h2>
+          <h2 id="replay-title">Could more sets have played that Sunday?</h2>
           <p>This is the real timetable from that Sunday, closed from 13:00 to 17:15. Make the two choices below, and the solver rebuilds the day.</p>
         </div>
         <div class="replay" id="live" data-ui>
@@ -69,7 +105,7 @@
           <div class="board-wrap"><div class="board" id="board" role="img" aria-label="The Bonnaroo Sunday timetable under the chosen terms"></div></div>
           <p class="fallback" id="fallback">With a midnight finish and sets shortened to 75%, 27 of 28 sets could have played, against 17 on the day. Open the studio to run it.</p>
         </div>
-        <p class="assume">Every result assumes the acts were still on site and willing to play a shorter set. The festival knew things this replay cannot, such as crew hours, mud and flights. It shows what was open, not what they should have done.</p>
+        <p class="assume">Every result assumes the acts were still on site and willing to play a shorter set. The festival knew things this model cannot, such as crew hours, mud and flights. It shows what was open, not what they should have done.</p>
       </section>
 
       <section class="names" data-ink="dark" aria-labelledby="names-title">
@@ -135,7 +171,7 @@
         <div class="faq">
           <details name="q" open>
             <summary>Did Bonnaroo get it wrong?</summary>
-            <p>We do not claim that. The replay assumes every act was still there and willing to play less, and the people on site knew about crew, power, mud and flights. Our reconstruction of the day they ran breaks none of the rules we model, which checks our rules, not their decisions. The point is that the options can be seen in minutes, not that one choice was wrong.</p>
+            <p>We do not claim that. This rebuild assumes every act was still there and willing to play less, and the people on site knew about crew, power, mud and flights. Our reconstruction of the day they ran breaks none of the rules we model, which checks our rules, not their decisions. The point is that the options can be seen in minutes, not that one choice was wrong.</p>
           </details>
           <details name="q">
             <summary>What is the agent, and what can't it do?</summary>
@@ -154,8 +190,12 @@
             <p>We don't, not fully. On Lollapalooza, three of ListenBrainz's four reciprocal pairs were also Qloo pairs, and Qloo ranked 496 pairs where that data links 11. Genre tags mostly disagree with it. In a test we set in advance, the clashes the press named at Outside Lands 2026 did not stand out on Qloo: 3 of 8 testable pairs sit in the stronger half, in a small sample. We have not measured attendance or asked a programmer to compare blind, and we say so in the <a href="https://github.com/YashMahawa/counterset/blob/main/docs/EVALUATION.md">evaluation</a>.</p>
           </details>
           <details name="q">
-            <summary>Is this live, or a recording?</summary>
-            <p>Both are there. “Try your own lineup” and “Run it live” call Qloo and the model now, on your input, with each visitor's use capped. “Watch the agent” replays one recorded run. The keys stay on the server.</p>
+            <summary>Is this a working product?</summary>
+            <p>Yes. Your own lineup goes through real Qloo calls, the real solver and the real model, and “Run it live” does the same on any day that is loaded. You can drag sets, edit the lineup, approve a version, share its timetable and copy each act's message. “Watch the agent” is the one saved run, for when you want to see it in 20 seconds, and it says so.</p>
+          </details>
+          <details name="q">
+            <summary>What happens to my lineup and the API keys?</summary>
+            <p>The Qloo and Gemini keys sit in the server's secret settings and never reach your browser or the logs. Each visitor has hourly limits on what they can spend, and there are daily limits for everyone. Act names go to Qloo and your messages go to Google's Gemini API on a free-tier key, so do not paste anything confidential. This free server can restart when idle: your days are listed in your browser, which keeps a copy of your own lineup so it can come back. Run it yourself for anything lasting.</p>
           </details>
           <details name="q">
             <summary>Can another agent use it?</summary>
@@ -167,10 +207,10 @@
       <section class="close" data-ink="dark" aria-labelledby="close-title">
         <div class="end end-photo"><img src="/web/assets/photo/bonnaroo-main-gate2016.jpg" width="1919" height="739" alt="The Bonnaroo main gate lit up at night" loading="lazy" /></div>
         <div class="end end-main">
-          <h2 id="close-title">Now try your own lineup</h2>
+          <h2 id="close-title">Your day is next</h2>
           <p>Paste any festival day. Qloo looks up your acts and ranks them live, the solver finds the clashes, and you can tell the agent what went wrong and watch it work.</p>
           <div class="close-actions">
-            <a class="button dark" href="/studio?lineup=1">Try your own lineup</a>
+            <a class="button dark" href="#start">Start with your lineup</a>
             <a class="text" href="/studio?day=bonnaroo-2026-sunday">Or run the Bonnaroo storm live</a>
           </div>
         </div>
@@ -182,7 +222,7 @@
       <p class="foot-word">Counterset</p>
       <div class="foot-row">
         <div class="places">
-          <a href="/studio">The rescue desk</a>
+          <a href="/studio">Your days</a>
           <a href="https://github.com/YashMahawa/counterset">Source code</a>
           <a href="/api/docs">API</a>
         </div>

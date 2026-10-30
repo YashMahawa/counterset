@@ -26,7 +26,7 @@
 }
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 72px;
+  scroll-padding-top: 48px;
 }
 body {
   margin: 0;
@@ -78,52 +78,10 @@ h2 {
   min-height: 90svh;
 }
 
-/* ---------- bar ---------- */
-.bar {
-  position: fixed;
-  z-index: 10;
-  inset: 0 0 auto 0;
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 12px var(--m);
-  color: var(--ink);
-  background: var(--bar-bg, transparent);
-  transition: color 300ms, background-color 300ms;
-}
-.bar.light {
-  color: var(--paper);
-}
-.word {
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  font-size: 1.25rem;
-  text-decoration: none;
-}
-.bar nav {
-  display: flex;
-  gap: 20px;
-  margin-left: auto;
-}
-.bar nav a,
-.bar-action {
-  font-size: var(--step-small);
-  font-weight: 500;
-  text-decoration: none;
-}
-.bar nav a:hover,
-.bar-action:hover {
-  text-decoration: underline;
-}
-.bar-action {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 /* ---------- first chapter ---------- */
 .storm {
   background: var(--orange);
-  min-height: 100svh;
+  min-height: calc(100svh - 48px);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -180,6 +138,74 @@ h1 .pale {
 .text {
   font-weight: 500;
   text-underline-offset: 3px;
+}
+
+/* ---------- your own day ---------- */
+.start {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.start-text {
+  grid-column: 1 / 7;
+  display: grid;
+  gap: 24px;
+}
+.start-text p {
+  font-size: var(--step-lead);
+  line-height: 1.3;
+  max-width: 34ch;
+}
+.start-form {
+  grid-column: 7 / 13;
+  display: grid;
+  gap: 12px;
+}
+.start-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 500;
+}
+.start-form input,
+.start-form textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 1rem/1.5 "Albert Sans", sans-serif;
+}
+.start-form button {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  font: 500 var(--step-body) "Albert Sans", sans-serif;
+  width: 100%;
+}
+.start-form .fine,
+.start-error {
+  font-size: var(--step-small);
+}
+.start-error:empty {
+  display: none;
+}
+.start-error {
+  font-weight: 500;
+}
+.journey {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+}
+.journey li {
+  padding: 12px 0;
+  border-top: 1px solid var(--ink);
+}
+.journey strong {
+  font-weight: 600;
 }
 
 /* ---------- the live replay ---------- */
@@ -828,16 +854,12 @@ details code {
 
 /* ---------- phone ---------- */
 @media (max-width: 860px) {
-  .bar nav {
-    display: none;
-  }
-  .bar-action {
-    margin-left: auto;
-  }
   h1 {
     font-size: 15.5vw;
     margin-top: 14vh;
   }
+  .start-text,
+  .start-form,
   .storm-action,
   .storm-say,
   .replay-top h2,

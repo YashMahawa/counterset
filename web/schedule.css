@@ -1,0 +1,164 @@
+@font-face {
+  font-family: "Albert Sans";
+  src: url("/web/assets/albert-sans.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #fff;
+  color: #000;
+  font: 400 1.0625rem/1.5 "Albert Sans", system-ui, sans-serif;
+}
+.head {
+  background: #a7ff9c;
+  padding: clamp(32px, 6vh, 64px) clamp(16px, 2.2vw, 32px);
+}
+h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 1.2rem + 5vw, 6rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.head p {
+  margin: 12px 0 0;
+  font-size: clamp(1.125rem, 1rem + 0.5vw, 1.375rem);
+}
+button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  background: #000;
+  color: #fff;
+  font: 500 1rem "Albert Sans", sans-serif;
+  cursor: pointer;
+}
+.sheet {
+  padding: 32px clamp(16px, 2.2vw, 32px) 0;
+}
+h2 {
+  margin: 0 0 16px;
+  font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.key {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 12px;
+  font-size: 0.875rem;
+}
+.key[hidden] {
+  display: none;
+}
+.key span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.key i {
+  display: block;
+  width: 22px;
+  height: 14px;
+}
+.k-changed {
+  background: #a7ff9c;
+}
+.k-short {
+  background: #ececec;
+  border-bottom: 4px solid #f4581f;
+}
+.wrap {
+  overflow-x: auto;
+}
+.board {
+  position: relative;
+}
+.tick,
+.lane {
+  position: absolute;
+  font-size: 0.8125rem;
+  color: #4d4d4d;
+}
+.lane {
+  overflow: hidden;
+  font-weight: 500;
+  color: #000;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rule {
+  position: absolute;
+  height: 1px;
+  background: #ececec;
+}
+.tile {
+  position: absolute;
+  overflow: hidden;
+  padding: 4px 6px;
+  background: #ececec;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.15;
+}
+.tile small {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.tile.changed {
+  background: #a7ff9c;
+}
+.tile.short {
+  border-bottom: 5px solid #f4581f;
+}
+.table {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  padding: 10px 16px 10px 0;
+  border-bottom: 1px solid #ececec;
+  text-align: left;
+  white-space: nowrap;
+}
+th {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #4d4d4d;
+}
+td:nth-child(2) {
+  font-weight: 500;
+}
+.fine {
+  padding-bottom: 48px;
+  color: #4d4d4d;
+  font-size: 0.875rem;
+}
+@media print {
+  .actions {
+    display: none;
+  }
+  .head {
+    background: none;
+    padding: 0;
+  }
+  .wrap {
+    overflow: visible;
+  }
+}

@@ -29,8 +29,11 @@ The repository holds no Qloo data, so a build from a clean clone has no worked e
 | `COUNTERSET_PUBLIC=1` | Open to anyone: hides other visitors' workspaces, and caps live Qloo calls and agent runs per visitor. Worked examples use their recorded rows. The Dockerfile sets it. |
 | `COUNTERSET_SAVED_REPLAY=1` | For very small servers: “Watch the agent” shows the saved run and the validator rechecks its plan. |
 | `AGENT_SOLVE_SECONDS` | Time for each agent solve. Default: 10. The small demo uses 20. |
+| `COUNTERSET_CLIENT_IP_HEADER` | The header your edge sets to the visitor's address, used for per-visitor limits. Set `cf-connecting-ip` behind Cloudflare, which Render is. Leave it empty on a host where visitors reach the app directly, or they could forge it. |
+| `MODEL_TASKS_PER_VISITOR_HOUR`, `MODEL_TASKS_PER_DAY` | Limits on reading a message, briefings and LLM baselines. Defaults: 15 and 150. |
+| `DAYS_PER_VISITOR_HOUR` | Limit on new days per visitor. Default: 60. |
 | `QLOO_MIN_INTERVAL` | Seconds between Qloo calls. Default: 13. The demo uses 1. |
-| `QLOO_CALLS_PER_VISITOR_HOUR`, `QLOO_CALLS_PER_DAY` | Live Qloo caps. Defaults: 90 and 1200. |
+| `QLOO_CALLS_PER_VISITOR_HOUR`, `QLOO_CALLS_PER_DAY` | Live Qloo caps. Defaults: 150 and 1200. |
 | `QLOO_PRIOR_SUCCESS`, `QLOO_SUCCESS_LIMIT` | Calls already used, and the total to stop at. Set these on a host with a temporary disk, because its ledger resets on restart. |
 | `GEMINI_FREE_API_KEY` | Needed only for "Run it live". Without it, "Watch the agent" still works, because it replays recorded decisions and re-runs every tool. |
 | `AGENT_RUNS_PER_VISITOR_HOUR`, `AGENT_RUNS_PER_DAY` | Live agent caps. Defaults: 3 and 40. |

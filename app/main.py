@@ -60,6 +60,11 @@ class EvidenceRequest(Versioned):
     refresh: bool = False
 
 
+class LineupEdit(Versioned):
+    name: str | None = Field(default=None, max_length=100)
+    text: str = Field(min_length=1, max_length=8000)
+
+
 class Publish(Versioned):
     proposal_id: str
     option: int = Field(default=0, ge=0, le=3)
@@ -125,8 +130,7 @@ def create_app(config=None):
     examples = Examples(cfg.private / "examples")
     pool = ThreadPoolExecutor(max_workers=2)
     fills = {}
-    agent_hits = {}
-    qloo_hits = {}
+    hits = {}
     app = FastAPI(title="Counterset", docs_url="/api/docs")
     app.state.store = store
     app.state.gateway = gateway
@@ -290,7 +294,8 @@ def create_app(config=None):
         return {"id": id, **p}
 
     @app.post("/api/projects")
-    def create(day: Day | None = None):
+    def create(request: Request, day: Day | None = None):
+        day_allowed(request)
         if day is None:
             return new_project(
                 demo(),
@@ -304,7 +309,8 @@ def create_app(config=None):
         return new_project(day, {}, {"kind": "operator_supplied", "note": "Imported production facts. Confirm identities and constraints before publishing."})
 
     @app.post("/api/examples/{example_id}")
-    def open_example(example_id: str):
+    def open_example(example_id: str, request: Request):
+        day_allowed(request)
         ex = examples.get(example_id)
         return new_project(Day.model_validate(ex["day"]), ex.get("evidence"), ex["context"])
 
@@ -322,7 +328,7 @@ def create_app(config=None):
             "proposals": [r for r in store.list("proposal") if r["project"] == id][:6],
             "notes": [r for r in store.list("note") if r["project"] == id][:10],
             "versions": [
-                {k: v for k, v in store.get("published", x).items() if k in {"number", "published_at", "audit", "option_priority", "reason"}} | {"id": x}
+                {k: v for k, v in store.get("published", x).items() if k in {"number", "published_at", "audit", "option_priority", "reason", "notices"}} | {"id": x}
                 for x in p["published"]
             ],
         }
@@ -334,37 +340,80 @@ def create_app(config=None):
             return change_day(id, p, old, req.day, "Facts edited")
 
     def visitor(request):
-        return request.client.host if request.client else "unknown"
+        # Only a named edge header counts: anyone can write X-Forwarded-For.
+        named = request.headers.get(cfg.client_ip_header) if cfg.client_ip_header else None
+        return named or (request.client.host if request.client else "unknown")
 
-    def qloo_allowed(request, calls):
-        """Live Qloo calls spend a real quota, so a public visitor gets a fair share."""
+    def spend(bucket, request, amount, per_hour, per_day, message):
+        """Whatever spends a key on a public site is capped per visitor and across all visitors."""
         if not cfg.public:
             return
-        if not cfg.qloo_key:
-            raise HTTPException(422, "No Qloo key is configured on this server")
         now = time.time()
+        book = hits.setdefault(bucket, {})
         ip = visitor(request)
-        mine = [(t, n) for t, n in qloo_hits.get(ip, []) if now - t < 3600]
-        total = sum(n for v in qloo_hits.values() for t, n in v if now - t < 86400)
-        if sum(n for _, n in mine) + calls > cfg.qloo_per_hour or total + calls > cfg.qloo_per_day:
-            raise HTTPException(429, "You have reached this demo's hourly limit for live Qloo calls. Try again later, or use a day already loaded.")
-        qloo_hits[ip] = [*mine, (now, calls)]
+        # Entries older than a day leave the book, so it cannot grow without end.
+        for who in list(book):
+            book[who] = [x for x in book[who] if now - x[0] < 86400]
+            if not book[who]:
+                del book[who]
+        mine = book.get(ip, [])
+        recent = sum(n for t, n in mine if now - t < 3600)
+        total = sum(n for v in book.values() for _, n in v)
+        if recent + amount > per_hour or total + amount > per_day:
+            raise HTTPException(429, message)
+        book[ip] = [*mine, (now, amount)]
+
+    def qloo_allowed(request, calls):
+        if cfg.public and not cfg.qloo_key:
+            raise HTTPException(422, "No Qloo key is configured on this server")
+        spend("qloo", request, calls, cfg.qloo_per_hour, cfg.qloo_per_day, "You have reached this server's hourly limit for live Qloo calls. Try again later, or keep working with what is already loaded.")
+
+    def model_task_allowed(request, model):
+        if model not in cfg.models:
+            raise HTTPException(422, "Choose a configured model")
+        spend("model", request, 1, cfg.model_tasks_per_hour, cfg.model_tasks_per_day, "You have reached this server's hourly limit for model calls. Try again later. The solver and the audit keep working.")
+
+    def day_allowed(request):
+        spend("days", request, 1, cfg.days_per_hour, cfg.days_per_hour * 40, "You have opened a lot of days this hour. Try again later.")
 
     @app.post("/api/lineups")
-    def own_lineup(req: Lineup):
+    def own_lineup(req: Lineup, request: Request):
+        day_allowed(request)
         day = lineup.parse(req.name, req.text)
-        return new_project(
-            day,
-            {},
-            {"kind": "own", "title": day.name, "note": "Your lineup. Stages, changeovers and availability are assumed from what you pasted: edit any act to correct them."},
-        )
+        return new_project(day, {}, own_context(day))
+
+    def own_context(day):
+        return {"kind": "own", "title": day.name, "note": "Your lineup. Stages, changeovers and availability are assumed from what you pasted: edit any act to correct them."}
+
+    @app.post("/api/lineups/restore")
+    def restore_lineup(day: Day, request: Request):
+        """A free host forgets its disk when it sleeps, so a browser can hand its own copy back."""
+        day_allowed(request)
+        if len(day.acts) > lineup.MAX_SETS or len(day.stages) > lineup.MAX_STAGES:
+            raise HTTPException(422, "This day is larger than this server takes")
+        return new_project(day, {}, own_context(day))
+
+    @app.get("/api/projects/{id}/lineup")
+    def lineup_text(id):
+        _, day = current(id)
+        return {"name": day.name, "text": lineup.text_of(day)}
+
+    @app.put("/api/projects/{id}/lineup")
+    def edit_lineup(id, req: LineupEdit):
+        with store.lock:
+            p, old = current(id, req.version)
+            if p.get("context", {}).get("kind") != "own":
+                raise HTTPException(403, "Only your own lineup can be edited as text.")
+            new = lineup.revise(old, req.text)
+            new.name = (req.name or old.name)[:100]
+            return change_day(id, p, old, new, "Lineup edited")
 
     @app.post("/api/projects/{id}/identify")
     def identify(id, req: Versioned, request: Request):
         p, day = current(id, req.version)
         if p.get("context", {}).get("kind") != "own":
             raise HTTPException(403, "This day's identities are already reviewed.")
-        qloo_allowed(request, len(day.acts))
+        qloo_allowed(request, sum(not a.qloo_id for a in day.acts))
         if not cfg.qloo_key:
             raise HTTPException(422, "No Qloo key is configured on this server")
 
@@ -477,13 +526,7 @@ def create_app(config=None):
 
     def agent_allowed(request):
         """Live runs spend a shared free model quota, so each visitor gets a few."""
-        now = time.time()
-        ip = request.client.host if request.client else "unknown"
-        hits = [t for t in agent_hits.get(ip, []) if now - t < 3600]
-        total = sum(1 for v in agent_hits.values() for t in v if now - t < 86400)
-        if len(hits) >= cfg.agent_per_hour or total >= cfg.agent_per_day:
-            raise HTTPException(429, "You have reached this demo's hourly limit for live agent runs. Try again later, or watch a recorded run.")
-        agent_hits[ip] = [*hits, now]
+        spend("agent", request, 1, cfg.agent_per_hour, cfg.agent_per_day, "You have reached this server's hourly limit for live agent runs. Try again later, or watch a saved run.")
 
     @app.post("/api/projects/{id}/agent")
     def agent_run(id, req: AgentRun, request: Request):
@@ -598,13 +641,14 @@ def create_app(config=None):
             raise HTTPException(404, "The storm replay is not installed here") from None
 
     @app.post("/api/proposals/{pid}/briefing")
-    def briefing(pid, req: Briefing):
+    def briefing(pid, req: Briefing, request: Request):
         proposal = store.get("proposal", pid)
         p, day = current(proposal["project"])
         if proposal["input_version"] != p["version"]:
             raise HTTPException(409, "This proposal is stale")
         if not cfg.model_key:
             raise HTTPException(422, "No model is configured; the computed options are complete without a briefing")
+        model_task_allowed(request, req.model)
 
         def work(progress):
             progress(0, 1, "Briefing from computed facts")
@@ -632,10 +676,11 @@ def create_app(config=None):
             return bump(id, p, hold_stage(day, req.stage_id, req.start, req.end, req.reason), f"Stage hold {req.reason}")
 
     @app.post("/api/projects/{id}/messages")
-    def message(id, req: Message):
+    def message(id, req: Message, request: Request):
         p, day = current(id, req.version)
         if not cfg.model_key:
             raise HTTPException(422, "No model is configured. Add the constraint with Stage hold or Edit act.")
+        model_task_allowed(request, req.model)
 
         def work(progress):
             progress(0, 1, f"{req.model} is reading the message; nothing is applied")
@@ -716,7 +761,8 @@ def create_app(config=None):
                 "proposal_id": req.proposal_id,
                 "option": req.option,
                 "option_priority": option["priority"],
-                "notices": proposal.get("notices", []),
+                # A hand-made repair has no drafted messages yet, so they are drafted here.
+                "notices": proposal.get("notices") or desk_agent.notices(day, places),
                 "solver_status": option["status"],
                 "placements": option["placements"],
                 "previous": before,
@@ -794,10 +840,12 @@ def create_app(config=None):
         )
 
     @app.post("/api/projects/{id}/benchmark")
-    def benchmark(id, req: Baseline):
+    def benchmark(id, req: Baseline, request: Request):
         p, day = current(id, req.version)
         if not p["evidence"]:
             raise HTTPException(422, "Load evidence first")
+        if req.model:
+            model_task_allowed(request, req.model)
         edges = all_edges(day, p["evidence"])
         lenses = dict(p.get("context", {}).get("lenses", {}))
         declared = genre_edges(day)
@@ -862,6 +910,10 @@ def create_app(config=None):
     @app.get("/studio")
     def studio():
         return FileResponse(cfg.root / "web/studio.html")
+
+    @app.get("/schedule")
+    def schedule():
+        return FileResponse(cfg.root / "web/schedule.html")
 
     from .mcp import mount_mcp
 

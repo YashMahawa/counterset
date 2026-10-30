@@ -1,0 +1,91 @@
+/* One top bar for every page: always solid black, so it reads over any chapter of colour. */
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 48px;
+  padding: 0 clamp(16px, 2.2vw, 32px);
+  background: #000;
+  color: #fff;
+  font-family: "Albert Sans", system-ui, sans-serif;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.brand:hover {
+  text-decoration: none;
+}
+.logo {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  fill: currentColor;
+}
+.logo-set {
+  fill: #f4581f;
+}
+.bar-links {
+  display: flex;
+  gap: 20px;
+  margin-left: auto;
+}
+.bar-links a {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.bar-links a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+a.bar-cta,
+button.bar-cta {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: #a7ff9c;
+  color: #000;
+  font: 500 14px/1 "Albert Sans", system-ui, sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+a.bar-cta:hover,
+button.bar-cta:hover:not(:disabled) {
+  background: #c4ffbc;
+  color: #000;
+}
+.bar :focus-visible {
+  outline: 2px solid #a7ff9c;
+  outline-offset: 2px;
+}
+@media (max-width: 860px) {
+  .bar-links {
+    display: none;
+  }
+  .bar > .bar-cta {
+    margin-left: auto;
+  }
+}
+@media print {
+  .bar {
+    display: none;
+  }
+}

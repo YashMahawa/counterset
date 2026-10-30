@@ -222,26 +222,6 @@ input[type="range"] {
   gap: 16px;
   padding: 0 calc(var(--inset) + 16px);
 }
-.mark {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text);
-  font-weight: 600;
-  font-size: 15px;
-}
-.mark:hover {
-  text-decoration: none;
-}
-.mark svg rect {
-  fill: var(--accent);
-}
-.mark svg rect + rect {
-  fill: var(--negative);
-}
-.mark svg path {
-  stroke: var(--text);
-}
 .day-switch {
   display: flex;
   align-items: center;
@@ -1121,7 +1101,7 @@ kbd {
     padding: 0 16px;
     gap: 8px;
   }
-  .mark span,
+  .brand span,
   .stamp,
   .mode,
   .day-switch span {
@@ -1493,23 +1473,8 @@ body {
   background: #000;
 }
 .top,
-.top a,
-.mark {
+.top a:not(.bar-cta) {
   color: #fff;
-}
-.mark span {
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-.mark svg rect {
-  fill: #a7ff9c;
-}
-.mark svg rect + rect {
-  fill: #f4581f;
-}
-.mark svg path {
-  stroke: #fff;
 }
 .day-switch,
 .day-switch strong {
@@ -1704,15 +1669,6 @@ svg.threads path.clash {
   overflow-wrap: anywhere;
 }
 
-button.own {
-  background: #a7ff9c;
-  color: #000;
-  border: 0;
-  font-weight: 500;
-}
-button.own:hover:not(:disabled) {
-  background: #c4ffbc;
-}
 #l-text {
   font-size: 14px;
   line-height: 1.5;
@@ -1721,9 +1677,246 @@ button.own:hover:not(:disabled) {
 #l-name {
   width: 100%;
 }
+
+/* Square corners everywhere, as on the public page. */
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+
+/* ---------- The bar ---------- */
+.top {
+  padding: 0 clamp(16px, 2.2vw, 32px);
+}
+.days-link {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.day-now {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.day-now strong {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.day-now span {
+  color: #cfcfcf;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.day-now::before {
+  content: "/";
+  color: #8a8a8a;
+}
+body[data-view="home"] .day-now,
+body[data-view="home"] #own-lineup,
+body[data-view="home"] #tools,
+body[data-view="home"] .mode,
+body[data-view="home"] .stamp {
+  display: none;
+}
 @media (max-width: 760px) {
-  button.own {
-    font-size: 13px;
-    padding: 4px 8px;
+  .day-now span,
+  .day-now::before {
+    display: none;
   }
+}
+@media (max-width: 480px) {
+  .day-now {
+    display: none;
+  }
+}
+
+/* ---------- Your days ---------- */
+.home[hidden],
+.sheet[hidden] {
+  display: none;
+}
+.home {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  min-height: calc(100vh - 48px);
+  background: #fff;
+  color: #000;
+}
+.new-day {
+  background: #a7ff9c;
+  padding: clamp(24px, 4vw, 56px) clamp(16px, 2.2vw, 32px);
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+.new-day h1 {
+  font-size: clamp(2.4rem, 1.2rem + 3.6vw, 4.5rem);
+}
+.new-day p {
+  max-width: 62ch;
+  margin: 0;
+}
+.new-day form {
+  display: grid;
+  gap: 12px;
+}
+.new-day label {
+  display: grid;
+  gap: 4px;
+  font-weight: 500;
+}
+.new-day input:not([type="file"]),
+.new-day textarea {
+  width: 100%;
+  background: #fff;
+  border: 1px solid #000;
+  font-size: 15px;
+}
+.new-day textarea {
+  line-height: 1.5;
+}
+.new-day .fine {
+  color: #000;
+}
+.new-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.new-actions button.primary,
+.file-button {
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 15px;
+}
+.file-button {
+  display: inline-flex !important;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid #000;
+  background: transparent;
+  font-weight: 500;
+  cursor: pointer;
+}
+.file-button:hover,
+.file-button:focus-within {
+  background: #000;
+  color: #fff;
+}
+.file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.your-days {
+  padding: clamp(24px, 4vw, 56px) clamp(16px, 2.2vw, 32px);
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+.your-days h2 {
+  font-size: clamp(1.5rem, 1.2rem + 1vw, 2.25rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.your-days h2 + div {
+  margin-bottom: 16px;
+}
+.day-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.day-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #dcdcdc;
+}
+.day-list a {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 0;
+  color: #000;
+}
+.day-list strong {
+  display: block;
+  font-weight: 500;
+}
+.day-list small,
+a.choice small {
+  display: block;
+  color: #4d4d4d;
+  font-size: 13px;
+}
+a.choice {
+  display: block;
+  padding: 12px;
+  background: #f2f2f2;
+  color: #000;
+  font-weight: 500;
+}
+a.choice:hover {
+  background: #e6e6e6;
+  text-decoration: none;
+}
+#examples-list {
+  display: grid;
+  gap: 4px;
+}
+#new-error:empty {
+  display: none;
+}
+#new-error {
+  color: #5a2410;
+  font-size: 15px;
+}
+@media (max-width: 860px) {
+  .home {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Moving a set ---------- */
+.set.movable {
+  cursor: grab;
+}
+.set.dragging {
+  z-index: 8;
+  cursor: grabbing;
+  transition: none;
+  outline: 2px solid #000;
+}
+.legend .hint {
+  color: #4d4d4d;
+}
+
+/* ---------- Sending out ---------- */
+.share-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.share-row input {
+  flex: 1;
+  min-width: 0;
+}
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-height);
+  padding: 0 12px;
+  border: 1px solid var(--control);
+  color: #000;
+  font-weight: 500;
 }

@@ -14,25 +14,36 @@ Replaying that Sunday on the real timetable, with a midnight finish and sets all
 
 This shows what was open, not what the festival should have done. It assumes every act was still on site and willing to play a shorter set, and the people there knew things this cannot, such as crew hours, mud and flights. The full list of assumptions is below and in the app.
 
-## Try it
+## Use it
 
-**Live demo: https://counterset-5e45c193.agichaos.dev** (no sign-in). If it has been idle, the first visit takes up to a minute to wake.
+**https://counterset-5e45c193.agichaos.dev** (no sign-in). If it has been idle, the first visit takes up to a minute to wake.
 
-1. **Try your own lineup.** Press **Try your own lineup** and paste a festival day, or keep the sample. Qloo looks up each act and ranks your bill live, and you check the matches. The timetable shows who shares a crowd and who clashes.
-2. **Break the day.** Open **The agent**, type what went wrong, such as “Sutro stage is closed 17:30 to 18:30”, and press **Run it live**. The real model chooses tools and the solver answers each try. It takes about a minute on a small lineup.
-3. **Compare and decide.** Press **Without Qloo** to see the same rescue with Qloo removed. Press **Approve**, and the validator rechecks the plan and saves a numbered version you can export as CSV.
-4. **See the real storm.** On the public page, change the choices in **Try it** and the Bonnaroo timetable rearranges, or press **Show what really happened** to compare. **Run it live** on that day works too, in about 4 minutes on this small server.
-5. **In a hurry?** **Watch the agent** shows one saved run in about 20 seconds, labelled as saved, and the validator rechecks its final plan.
-6. **From any MCP client,** add `/mcp` and call `rescue_day`.
+1. **Bring your day.** Press **Start with your lineup** and paste a festival day, or keep the sample and press **Build my day**. CSV files and spreadsheet rows work too. Qloo finds each act live and you check the matches.
+2. **Read the crowds.** Press **These look right**. Qloo ranks your bill live, and the timetable shows who shares a crowd and who clashes.
+3. **Fix it by hand.** Drag a set to another time or stage. The audit answers as soon as you drop it, and **Undo** puts it back. Press **Edit the lineup** to change the bill as text.
+4. **Break the day.** Open **The agent**, say what went wrong, such as “Sutro stage is closed 17:30 to 18:30”, and press **Run it live**. The real model chooses tools and the solver answers each try, in about a minute on a small lineup.
+5. **Decide and send.** Press **Without Qloo** to see the same rescue with Qloo removed. Press **Approve**: the validator rechecks the plan and saves a numbered version. You then get a timetable link to share, a CSV and a drafted message for each affected act.
+6. **Come back later.** **Your days** lists your days in this browser. Every day has its own link.
+7. **See the real storm.** On the public page, make the two choices under **Could more sets have played that Sunday?**, or press **What really happened** to compare. **Run it live** works on that day too, in about 4 minutes on this small server. **Watch the agent** shows one saved run in about 20 seconds, labelled as saved.
+8. **From any MCP client,** add `/mcp` and call `rescue_day`.
 
-**Your keys stay on the server.** The Qloo and Gemini keys live in the host's secret settings. They are never sent to the browser, logged or cached with results. Each visitor has hourly caps on live Qloo calls and agent runs, and there is a daily cap across all visitors.
+### How the API keys are protected
+
+- The Qloo and Gemini keys are secret settings on the host. They are not in the code, the browser, the logs or any response. Calls send them in headers, so they never appear in a URL.
+- The browser only ever talks to this server, and the server only calls an allowlist of Qloo paths and two named Gemini models.
+- Every route that spends a key has an hourly limit per visitor and a daily limit across all visitors. A visitor is identified by the address Cloudflare reports, because `X-Forwarded-For` can be forged.
+- Worked examples carry their recorded rows, so they do not read Qloo again. Other websites cannot make a visitor's browser call the API, because writes need a custom header and a matching origin.
+- The Gemini key is a free-tier key, so it cannot run up a bill, and Google may use what it receives to improve its products. The interface says not to paste anything confidential.
+- If a limit is reached, the visitor is told and the solver and audit keep working.
+
+This free server is small: a tenth of a CPU core, and it restarts after 15 idle minutes. A restart clears the server's disk, including approved versions and its running totals of calls. Your browser keeps a copy of your own lineup and brings it back, and a shared timetable link holds its own data, so it keeps working. For lasting use, run it on your own server.
 
 ## What judges are scoring
 
 | Criterion | Where to look |
 | --- | --- |
-| **Technological implementation** | A tool-calling agent over a constraint solver (OR-Tools CP-SAT), with a separate pure-Python validator that recounts every rule and objective. 62 tests, including brute-force checks of the solver. Qloo is used through three endpoints: see [Exactly how Qloo is used](#exactly-how-qloo-is-used). |
-| **Design** | One flow, from the storm to an approved version. The timetable moves as the agent works. Plain language throughout, with the technical detail one click away. Works at phone width and with reduced motion. |
+| **Technological implementation** | A tool-calling agent over a constraint solver (OR-Tools CP-SAT), with a separate pure-Python validator that recounts every rule and objective. 68 tests, including brute-force checks of the solver. Qloo is used through three endpoints: see [Exactly how Qloo is used](#exactly-how-qloo-is-used). |
+| **Design** | One flow, from a pasted lineup to an approved version and a shared timetable. One look across the site, with a single top bar and logo. The timetable moves as the agent works. Plain language throughout, with the technical detail one click away. Works at phone width and with reduced motion. |
 | **Potential impact** | A specific person (the festival programmer) and a recurring problem: [seven festivals were hit by weather in 2026 that we found in the press](#why-this-problem). A real day, real timetable and real cancellations, with the limits stated. |
 | **Quality of the idea** | Taste data used to schedule, not to recommend. Qloo decides which sets must not play at once and which set to lose first, across music, comedy and podcasts. Every result can be compared with the same solver without Qloo, and the app says when Qloo changed nothing. |
 

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Timetable — Counterset</title>
+    <link rel="icon" href="/web/assets/icon.svg" type="image/svg+xml" />
+    <link rel="preload" href="/web/assets/albert-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/web/bar.css?v=1" />
+    <link rel="stylesheet" href="/web/schedule.css?v=1" />
+    <script src="/web/schedule.js?v=1" defer></script>
+  </head>
+  <body>
+    <header class="bar">
+      <a class="brand" href="/">
+        <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="14" height="6" /><rect x="2" y="9" width="8" height="6" /><rect class="logo-set" x="12" y="9" width="7" height="6" /><rect x="8" y="16" width="14" height="6" /></svg>
+        <span>Counterset</span>
+      </a>
+      <a class="bar-cta" href="/studio?lineup=1">Start with your lineup</a>
+    </header>
+    <main>
+      <section class="head">
+        <h1 id="name">Timetable</h1>
+        <p id="meta"></p>
+        <p class="actions"><button type="button" id="print">Print</button></p>
+      </section>
+      <section class="sheet" aria-labelledby="board-title">
+        <h2 id="board-title" class="hidden">Timetable</h2>
+        <div class="key" id="key" hidden><span><i class="k-changed"></i>Moved</span><span><i class="k-short"></i>Shorter</span></div>
+        <div class="wrap"><div class="board" id="board" role="img"></div></div>
+      </section>
+      <section class="sheet" aria-labelledby="list-title">
+        <h2 id="list-title">Every set, in order</h2>
+        <div class="table"><table><thead><tr><th>Time</th><th>Act</th><th>Stage</th><th>Change</th></tr></thead><tbody id="rows"></tbody></table></div>
+      </section>
+      <section class="sheet" id="out-box" aria-labelledby="out-title" hidden>
+        <h2 id="out-title">Not playing</h2>
+        <p id="out"></p>
+      </section>
+      <p class="fine sheet">This timetable is held in the link itself. Check with the organiser for the latest version.</p>
+    </main>
+  </body>
+</html>
