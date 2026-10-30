@@ -3143,3 +3143,9 @@ a.watch-saved:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* A primary button keeps its light words while the pointer is on it. */
+button.primary:hover:not(:disabled) {
+  background: #2a2a2a;
+  color: #fff;
+}
