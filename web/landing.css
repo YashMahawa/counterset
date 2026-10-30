@@ -756,6 +756,12 @@ details code {
 .end-main p {
   max-width: 54ch;
 }
+.close-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px;
+}
 .end-flat {
   background: var(--mint);
 }

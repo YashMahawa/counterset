@@ -50,7 +50,7 @@ class Gateway:
             wait = (
                 max(
                     0,
-                    (13 if provider == "qloo" else 5)
+                    (self.cfg.qloo_interval if provider == "qloo" else 5)
                     - (time.time() - previous[-1]["at"]),
                 )
                 if previous

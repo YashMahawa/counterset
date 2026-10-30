@@ -13,9 +13,10 @@ from .agent import brief, llm_baseline, propose_changes
 from . import desk_agent
 from .config import Config
 from .domain import Day, Placement, Priority, Strict, Kind, QLOO_TYPES, digest, reference_hash
-from .evidence import age_days, all_edges, attendee_edges, entities, fetch_snapshot, genre_edges, identity_key
+from .evidence import age_days, all_edges, attendee_edges, entities, explain_pairs, fetch_snapshot, genre_edges, identity_key
 from .examples import Examples
 from .fixtures import demo
+from . import lineup
 from .providers import Gateway, ProviderError
 from .repair import apply_scenario, as_run_audit, hold_stage, placements, plan, site_hold
 from .solver import solve
@@ -107,6 +108,11 @@ class Identity(Versioned):
     kind: Kind | None = None
 
 
+class Lineup(Strict):
+    name: str = Field(default="Your lineup", max_length=100)
+    text: str = Field(min_length=1, max_length=6000)
+
+
 class Resolve(Strict):
     query: str = Field(min_length=1, max_length=120)
     kind: Kind = "artist"
@@ -120,6 +126,7 @@ def create_app(config=None):
     pool = ThreadPoolExecutor(max_workers=2)
     fills = {}
     agent_hits = {}
+    qloo_hits = {}
     app = FastAPI(title="Counterset", docs_url="/api/docs")
     app.state.store = store
     app.state.gateway = gateway
@@ -250,7 +257,7 @@ def create_app(config=None):
         return {
             "public": cfg.public,
             "saved_replay": cfg.saved_replay,
-            "qloo_configured": bool(cfg.qloo_key) and not cfg.public,
+            "qloo_configured": bool(cfg.qloo_key),
             "model_configured": bool(cfg.model_key),
             "models": cfg.models,
             "budget": gateway.budget(),
@@ -326,10 +333,53 @@ def create_app(config=None):
             p, old = current(id, req.version)
             return change_day(id, p, old, req.day, "Facts edited")
 
+    def visitor(request):
+        return request.client.host if request.client else "unknown"
+
+    def qloo_allowed(request, calls):
+        """Live Qloo calls spend a real quota, so a public visitor gets a fair share."""
+        if not cfg.public:
+            return
+        if not cfg.qloo_key:
+            raise HTTPException(422, "No Qloo key is configured on this server")
+        now = time.time()
+        ip = visitor(request)
+        mine = [(t, n) for t, n in qloo_hits.get(ip, []) if now - t < 3600]
+        total = sum(n for v in qloo_hits.values() for t, n in v if now - t < 86400)
+        if sum(n for _, n in mine) + calls > cfg.qloo_per_hour or total + calls > cfg.qloo_per_day:
+            raise HTTPException(429, "You have reached this demo's hourly limit for live Qloo calls. Try again later, or use a day already loaded.")
+        qloo_hits[ip] = [*mine, (now, calls)]
+
+    @app.post("/api/lineups")
+    def own_lineup(req: Lineup):
+        day = lineup.parse(req.name, req.text)
+        return new_project(
+            day,
+            {},
+            {"kind": "own", "title": day.name, "note": "Your lineup. Stages, changeovers and availability are assumed from what you pasted: edit any act to correct them."},
+        )
+
+    @app.post("/api/projects/{id}/identify")
+    def identify(id, req: Versioned, request: Request):
+        p, day = current(id, req.version)
+        if p.get("context", {}).get("kind") != "own":
+            raise HTTPException(403, "This day's identities are already reviewed.")
+        qloo_allowed(request, len(day.acts))
+        if not cfg.qloo_key:
+            raise HTTPException(422, "No Qloo key is configured on this server")
+
+        def work(progress):
+            matched, found = lineup.match(day, gateway, progress)
+            with store.lock:
+                fresh, old = current(id, req.version)
+                change_day(id, fresh, old, matched, f"{len(found)} acts matched in Qloo")
+            return {"found": found, "total": len(day.acts)}
+
+        return background("Looking up acts in Qloo", work)
+
     @app.post("/api/resolve")
-    def resolve(req: Resolve):
-        if cfg.public:
-            raise HTTPException(403, "Live Qloo search is off on the public demo. The worked examples use recorded Qloo rows.")
+    def resolve(req: Resolve, request: Request):
+        qloo_allowed(request, 1)
         payload, source = gateway.qloo("/search", {"query": req.query, "types": QLOO_TYPES[req.kind], "take": 5})
         return {
             "source": source,
@@ -359,19 +409,26 @@ def create_app(config=None):
             return change_day(id, p, Day.model_validate(p["day"]), new, reason)
 
     @app.post("/api/projects/{id}/evidence")
-    def evidence(id, req: EvidenceRequest):
+    def evidence(id, req: EvidenceRequest, request: Request):
         p, day = current(id, req.version)
-        if req.source == "live" and cfg.public:
-            raise HTTPException(403, "Live Qloo queries are off on the public demo. The worked examples use recorded Qloo rows.")
+        if req.source == "live" and cfg.public and p.get("context", {}).get("kind") != "own":
+            raise HTTPException(403, "This day already carries its Qloo rows. Paste your own lineup to query Qloo live.")
         if req.source not in {"cache", "live"}:
             raise HTTPException(422, "Choose cache or live evidence")
         if sum(bool(a.qloo_id) for a in day.acts) < 2:
             raise HTTPException(422, "Confirm at least two identities first")
         if req.source == "live" and not cfg.qloo_key:
             raise HTTPException(422, "No Qloo key is configured on this server")
+        confirmed = sum(bool(a.qloo_id) for a in day.acts)
+        if req.source == "live":
+            kinds = len({QLOO_TYPES[a.kind] for a in day.acts if a.qloo_id})
+            qloo_allowed(request, confirmed * kinds + 1 + 6)
 
         def work(progress):
-            snapshot = fetch_snapshot(day, gateway, progress, req.refresh, offline=req.source == "cache")
+            snapshot = fetch_snapshot(day, gateway, progress, req.refresh and not cfg.public, offline=req.source == "cache")
+            if req.source == "live":
+                progress(1, 1, "Asking Qloo why the strongest pairs share a crowd")
+                snapshot["explain"] = explain_pairs(day, snapshot, gateway)
             if req.source == "cache" and not any(v for v in snapshot["ranks"].values()):
                 raise ValueError("This lineup has no cached Qloo rows. Query it live with a configured key.")
             with store.lock:
@@ -425,7 +482,7 @@ def create_app(config=None):
         hits = [t for t in agent_hits.get(ip, []) if now - t < 3600]
         total = sum(1 for v in agent_hits.values() for t in v if now - t < 86400)
         if len(hits) >= cfg.agent_per_hour or total >= cfg.agent_per_day:
-            raise HTTPException(429, "Live agent runs are capped on the public demo. Watch the recorded run: its tools are re-run for you now.")
+            raise HTTPException(429, "You have reached this demo's hourly limit for live agent runs. Try again later, or watch a recorded run.")
         agent_hits[ip] = [*hits, now]
 
     @app.post("/api/projects/{id}/agent")
@@ -499,7 +556,7 @@ def create_app(config=None):
             try:
                 outcome = desk_agent.run(
                     day, p["evidence"], context, req.text, gateway, req.model, step,
-                    turns=recorded["decisions"] if req.mode == "replay" else None, seconds=10,
+                    turns=recorded["decisions"] if req.mode == "replay" else None, seconds=cfg.agent_solve_seconds,
                 )
                 proposal = desk_agent.to_proposal(outcome, day)
                 proposal.update(

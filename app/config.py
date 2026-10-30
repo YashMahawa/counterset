@@ -60,5 +60,10 @@ class Config:
         self.unlisted = self.values.get("COUNTERSET_UNLISTED", "").lower() in {"1", "true", "yes"}
         # On a very small server, "Watch the agent" shows the saved run and rechecks its plan.
         self.saved_replay = self.values.get("COUNTERSET_SAVED_REPLAY", "").lower() in {"1", "true", "yes"}
-        self.agent_per_hour = int(self.values.get("AGENT_RUNS_PER_VISITOR_HOUR", "3"))
+        # Live Qloo on the public site: the key never leaves the server, and each visitor has a cap.
+        self.qloo_interval = max(1.0, float(self.values.get("QLOO_MIN_INTERVAL", "13")))
+        self.qloo_per_hour = int(self.values.get("QLOO_CALLS_PER_VISITOR_HOUR", "90"))
+        self.qloo_per_day = int(self.values.get("QLOO_CALLS_PER_DAY", "1200"))
+        self.agent_solve_seconds = float(self.values.get("AGENT_SOLVE_SECONDS", "10"))
+        self.agent_per_hour = int(self.values.get("AGENT_RUNS_PER_VISITOR_HOUR", "5"))
         self.agent_per_day = int(self.values.get("AGENT_RUNS_PER_DAY", "40"))

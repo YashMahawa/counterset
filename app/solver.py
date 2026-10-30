@@ -34,6 +34,7 @@ def build(day: Day, edges: list[dict], budget: int):
 
     trim_terms = []
     decisions = []
+    handles = {}
     for a in day.acts:
         draft = drafts[a.id]
         t = m.new_int_var(0, 2880 // day.grid, f"t_{a.id}")
@@ -62,6 +63,7 @@ def build(day: Day, edges: list[dict], budget: int):
         else:
             length = a.duration
         lengths[a.id] = length
+        handles[a.id] = (t, st, cut, length)
         occupied_until = m.new_int_var(0, 3300, f"occupied_{a.id}")
         m.add(occupied_until == start[a.id] + length + a.changeover)
         window = guard(f"{a.name}: available {clock(a.earliest)}–{clock(a.latest)}")
@@ -157,7 +159,7 @@ def build(day: Day, edges: list[dict], budget: int):
         "overlap_minutes": sum(terms["overlap"]),
         "displacement": sum(displacement),
     }
-    return m, start, stage, stage_ids, lengths, cuts, decisions, guards, objectives
+    return m, start, stage, stage_ids, lengths, cuts, decisions, handles, guards, objectives
 
 
 def _solver(seconds, workers=1):
@@ -207,9 +209,20 @@ def read_placement(s, a, stage, stage_ids, start, lengths, cuts, day):
     )
 
 
-def solve(day: Day, edges: list[dict], budget: int = 4, seconds: float = 12, priority=None):
+def solve(day: Day, edges: list[dict], budget: int = 4, seconds: float = 12, priority=None, hint=None):
+    """`hint` is a known schedule to start from. It speeds the search and decides nothing:
+    the solver still checks every rule, and the validator recounts the result."""
     priority = priority or day.repair_priority
-    m, start, stage, stage_ids, lengths, cuts, decisions, guards, obj = build(day, edges, budget)
+    m, start, stage, stage_ids, lengths, cuts, decisions, handles, guards, obj = build(day, edges, budget)
+    for p in hint or []:
+        if p["act_id"] in handles and p["stage_id"] in stage_ids:
+            t, st, cut, length = handles[p["act_id"]]
+            m.add_hint(t, p["start"] // day.grid)
+            m.add_hint(cut, 1 if p.get("cut") else 0)
+            if not p.get("cut"):
+                m.add_hint(st, stage_ids.index(p["stage_id"]))
+                if not isinstance(length, int):
+                    m.add_hint(length, p.get("length") or next(a.duration for a in day.acts if a.id == p["act_id"]))
     rescue = day.allow_cut or day.allow_trim
     workers = RESCUE_WORKERS if rescue else 1
     for lit in guards.values():

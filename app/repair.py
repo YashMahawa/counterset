@@ -45,10 +45,15 @@ def hold_stage(day: Day, stage_id: str, start: int, end: int, reason: str) -> Da
     data = day.model_dump()
     data["outages"].append(Outage(stage_id=stage_id, start=start, end=end, reason=reason).model_dump())
     if day.auto_lock_started:
-        first = {p.act_id: p.start for p in day.draft}
+        placed = {p.act_id: p for p in day.draft}
         for a in data["acts"]:
-            if first[a["id"]] < start:
+            p = placed[a["id"]]
+            if p.start < start:
                 a["locked"] = True
+                # A set that finishes before the closure has no changeover left to fit into it.
+                end = p.start + (p.length or a["duration"])
+                if p.stage_id == stage_id and end <= start:
+                    a["changeover"] = min(a["changeover"], start - end)
     return Day.model_validate(data)
 
 

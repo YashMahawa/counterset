@@ -193,6 +193,25 @@ def fetch_snapshot(day, gateway, progress=lambda *_: None, refresh=False, offlin
     return graph(day, rows, source, control)
 
 
+# Qloo also returns where a crowd's taste comes from. These do not explain a shared taste.
+PLACES = {"United States", "United Kingdom", "American", "British", "Manchester", "Canadian", "Australian", "Canada", "Australia"}
+
+
+def explain_pairs(day: Day, evidence, gateway, limit=6):
+    """Why the strongest pairs share a crowd, in Qloo's tag names. Only the names are kept."""
+    ids = {a.id: a.qloo_id for a in day.acts}
+    out = {}
+    for e in sorted(evidence.get("edges", []), key=lambda x: sum(x["ranks"]))[:limit]:
+        payload, _ = gateway.qloo(
+            "/v2/analysis/compare",
+            {"a.signal.interests.entities": ids[e["a"]], "b.signal.interests.entities": ids[e["b"]], "take": 12},
+        )
+        res = payload.get("results", {})
+        tags = res.get("tags", []) if isinstance(res, dict) else []
+        out["|".join(canonical_pair(e["a"], e["b"]))] = [t["name"] for t in tags if t.get("name") and t["name"] not in PLACES][:6]
+    return out
+
+
 def identity_key(day: Day):
     return [(a.id, a.qloo_id, a.kind) for a in day.acts] + [day.k]
 

@@ -214,12 +214,15 @@ const TOOL_WORDS = {
   try_rescue: "Tried a rescue",
   compare_without_qloo: "Solved it again without Qloo",
   compare_as_run: "Compared with what really happened",
+  report_conflict: "Reported that nothing fits",
   why_they_share_a_crowd: "Asked why two acts share a crowd",
   finish: "Handed over a recommendation",
 };
 const hasRecording = () => !!S.project.context?.recorded_run && S.project.version === 1;
 const finalOption = () => (current() && S.proposal.agent ? S.proposal.options[0] : null);
+const noPlan = () => current() && S.proposal.agent && S.proposal.no_plan;
 function agentFinding() {
+  if (noPlan()) return `No plan fits. ${esc(S.proposal.summary)}`;
   const o = finalOption();
   const ctx = S.project.context || {};
   const ran = S.project.as_run_audit;
@@ -255,6 +258,7 @@ function traceList() {
     .join("")}</ol>`;
 }
 function scorecard() {
+  if (noPlan()) return `<h2>What stands in the way</h2><p>${esc(S.proposal.summary)}</p>${(S.proposal.core || []).map((c) => `<p class="note bad">${esc(c)}</p>`).join("")}<p class="fine">Nothing has changed. Edit the message or an act, then run it again.</p>`;
   const o = finalOption();
   const ran = S.project.as_run_audit;
   if (!o) {
@@ -1024,7 +1028,7 @@ async function openProject(id) {
   S.typed = {};
   const saved = store.get("counterset-step-" + id);
   S.step = saved !== null ? +saved : 0;
-  if (S.proposal?.agent) S.view = "opt0";
+  if (S.proposal?.agent && !S.proposal.no_plan) S.view = "opt0";
   render();
 }
 async function load() {
@@ -1032,6 +1036,13 @@ async function load() {
   setMode(store.get("counterset-mode") || "walk");
   const params = new URLSearchParams(location.search);
   const wanted = params.get("day");
+  if (params.has("lineup")) {
+    const first = S.config.examples[0];
+    await openProject((first ? await api(`/examples/${first.id}`, "POST") : await api("/projects", "POST")).id);
+    history.replaceState(null, "", "/studio");
+    lineupDialog();
+    return;
+  }
   if (wanted && S.config.examples.some((e) => e.id === wanted)) {
     const fresh = await api(`/examples/${wanted}`, "POST");
     await openProject(fresh.id);
@@ -1085,10 +1096,40 @@ function dialog(title, html, onSubmit) {
   };
   d.showModal();
 }
-function identitiesDialog() {
+const SAMPLE_LINEUP = `Lands End | Lucy Dacus | 16:00 | 16:50
+Lands End | Ethel Cain | 17:20 | 18:20
+Lands End | Djo | 18:50 | 19:50
+Lands End | The Strokes | 20:35 | 21:55
+Twin Peaks | Dijon | 17:30 | 18:30
+Twin Peaks | The xx | 20:10 | 21:25
+Sutro | Yard Act | 16:20 | 17:05
+Sutro | Snow Strippers | 17:35 | 18:20
+Sutro | PinkPantheress | 20:45 | 21:45
+Comedy Tent | Nate Bargatze | 18:00 | 18:45 | comedy
+Comedy Tent | Ali Wong | 19:00 | 19:45 | comedy`;
+function lineupDialog() {
   dialog(
-    "Identities",
-    `<p class="fine">Confirm each act against a Qloo search result. Unresolved acts stay unknown in the evidence.</p><div class="table-wrap"><table><thead><tr><th>Act</th><th>Kind</th><th>Status</th><th></th></tr></thead><tbody>${day()
+    "Try your own lineup",
+    `<p>Paste your festival day, one set per line: stage, act, start, end. Add comedy, podcast or talk as a last column for other kinds of act. Up to 24 sets.</p>
+    <label>Name of the day<input id="l-name" value="My festival" maxlength="100" /></label>
+    <label>Lineup<textarea id="l-text" rows="13" spellcheck="false">${esc(SAMPLE_LINEUP)}</textarea></label>
+    <p class="fine">The sample uses real acts with an invented grid. Everything from here runs live: Qloo looks up each act and ranks the bill, then the solver and the agent work your day.</p>
+    <button class="primary">Look up these acts in Qloo</button>`,
+    async () => {
+      const p = await api("/lineups", "POST", { name: $("#l-name").value, text: $("#l-text").value });
+      await openProject(p.id);
+      $("#dialog").close();
+      S.step = 1;
+      const r = await job(`/projects/${p.id}/identify`, { version: S.project.version }, "Looking up each act in Qloo…");
+      await reload();
+      identitiesDialog(r);
+    },
+  );
+}
+function identitiesDialog(found) {
+  dialog(
+    found ? `Qloo found ${found.found.length} of ${found.total} acts` : "Identities",
+    `<p class="${found ? "" : "fine"}">${found ? "These are exact-name matches. Check they are the right performers. An act with no match stays unknown, never zero, and you can search for it by hand." : "Confirm each act against a Qloo search result. Unresolved acts stay unknown in the evidence."}</p>${found && confirmed() >= 2 ? `<div class="row"><button type="button" class="primary" data-action="evidence" data-source="live" data-direct="yes">These look right: read the crowds from Qloo</button></div>` : ""}<div class="table-wrap"><table><thead><tr><th>Act</th><th>Kind</th><th>Status</th><th></th></tr></thead><tbody>${day()
       .acts.map((a) => `<tr><td>${esc(a.name)}</td><td>${kindLabel[a.kind]}</td><td>${a.qloo_id ? "confirmed" : "<strong>unresolved</strong>"}</td><td><button type="button" data-action="resolve" data-act="${esc(a.id)}">${a.qloo_id ? "Change" : "Find"}</button></td></tr>`)
       .join("")}</tbody></table></div>`,
   );
@@ -1289,9 +1330,9 @@ const actions = {
           S.agentRunning = false;
           await reload();
           S.proposal = { ...j.result, proposal_id: j.result.proposal_id };
-          S.view = "opt0";
+          S.view = j.result.no_plan ? "draft" : "opt0";
           render();
-          say("The agent has finished. Nothing has changed: approve it, or inspect any step.");
+          say(j.result.no_plan ? "The agent has finished. It found no plan, and nothing has changed." : "The agent has finished. Nothing has changed: approve it, or inspect any step.");
           return;
         }
       }
@@ -1331,13 +1372,14 @@ const actions = {
   },
   evidence: async (t) => {
     const live = t.dataset.source === "live";
-    if (live && !confirm(`Query Qloo for this bill? Up to ${estimate()} requests; cached rows are not re-requested unless refreshing.`)) return;
+    if (live && !t.dataset.direct && !S.config.public && !confirm(`Query Qloo for this bill? Up to ${estimate()} requests; cached rows are not re-requested unless refreshing.`)) return;
+    if ($("#dialog").open) $("#dialog").close();
     const r = await job(`/projects/${S.project.id}/evidence`, { version: S.project.version, source: live ? "live" : "cache", refresh: live && hasEvidence() }, "Reading the exact-bill Qloo rows…");
     S.proposal = null;
     S.drawThreads = true;
     S.step = 2;
     await reload();
-    say(`Evidence ${r.status.toLowerCase()}. Red lines join pairs that share a crowd and play at the same time.`);
+    say(`Live Qloo rows loaded. Lines join pairs that share a crowd and play at once.${S.project.context?.kind === "own" ? " Next, open The agent, tell it what went wrong and press Run it live." : ""}`);
   },
   message: async () => {
     const note = await job(`/projects/${S.project.id}/messages`, { version: S.project.version, text: $("#message").value, model: $("#message-model").value }, "Reading the message. Nothing is applied.");
@@ -1435,6 +1477,7 @@ $("#mode-walk").onclick = () => setMode("walk");
 $("#mode-toggle").onclick = () => (closeMenu(), setMode(document.body.dataset.mode === "walk" ? "desk" : "walk"));
 $("#mode-desk").onclick = () => setMode("desk");
 $("#open-day").onclick = () => guarded(openDayDialog);
+$("#own-lineup").onclick = () => lineupDialog();
 $("#edit-json").onclick = () => (closeMenu(), jsonDialog());
 $("#compare").onclick = () => (closeMenu(), guarded(compareDialog));
 $("#shortcuts").onclick = () => (closeMenu(), shortcutsDialog());

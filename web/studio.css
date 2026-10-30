@@ -1703,3 +1703,27 @@ svg.threads path.clash {
   font-size: 11px;
   overflow-wrap: anywhere;
 }
+
+button.own {
+  background: #a7ff9c;
+  color: #000;
+  border: 0;
+  font-weight: 500;
+}
+button.own:hover:not(:disabled) {
+  background: #c4ffbc;
+}
+#l-text {
+  font-size: 14px;
+  line-height: 1.5;
+  width: 100%;
+}
+#l-name {
+  width: 100%;
+}
+@media (max-width: 760px) {
+  button.own {
+    font-size: 13px;
+    padding: 4px 8px;
+  }
+}

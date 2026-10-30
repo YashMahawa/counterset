@@ -7,8 +7,8 @@
     <title>Counterset — the rescue desk for festival days</title>
     <link rel="icon" href="/web/assets/icon.svg" type="image/svg+xml" />
     <link rel="preload" href="/web/assets/albert-sans.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/web/landing.css?v=5" />
-    <script src="/web/landing.js?v=6" defer></script>
+    <link rel="stylesheet" href="/web/landing.css?v=7" />
+    <script src="/web/landing.js?v=7" defer></script>
   </head>
   <body>
     <header class="bar" id="bar">
@@ -17,6 +17,7 @@
         <a href="#replay">Try it</a>
         <a href="#agent">The agent</a>
         <a href="#qloo">Why Qloo</a>
+        <a href="/studio?lineup=1">Your own lineup</a>
         <a href="#questions">Questions</a>
       </nav>
       <a class="bar-action" href="/studio?day=bonnaroo-2026-sunday&amp;watch=1">Watch the agent</a>
@@ -28,7 +29,7 @@
         <div class="storm-foot">
           <div class="storm-action">
             <a class="button" href="/studio?day=bonnaroo-2026-sunday&amp;watch=1">Watch the agent rebuild that day</a>
-            <a class="text" href="#replay">Or try the choices yourself</a>
+            <a class="text" href="/studio?lineup=1">Or try your own lineup</a>
           </div>
           <p class="storm-say">Bonnaroo, 14 June 2026. Counterset is a rescue agent for festival programmers. It rebuilds a broken day around what fans share, using Qloo, and a person approves.</p>
         </div>
@@ -153,6 +154,10 @@
             <p>We don't, not fully. On Lollapalooza, three of ListenBrainz's four reciprocal pairs were also Qloo pairs, and Qloo ranked 496 pairs where that data links 11. Genre tags mostly disagree with it. In a test we set in advance, the clashes the press named at Outside Lands 2026 did not stand out on Qloo: 3 of 8 testable pairs sit in the stronger half, in a small sample. We have not measured attendance or asked a programmer to compare blind, and we say so in the <a href="https://github.com/YashMahawa/counterset/blob/main/docs/EVALUATION.md">evaluation</a>.</p>
           </details>
           <details name="q">
+            <summary>Is this live, or a recording?</summary>
+            <p>Both are there. “Try your own lineup” and “Run it live” call Qloo and the model now, on your input, with each visitor's use capped. “Watch the agent” replays one recorded run. The keys stay on the server.</p>
+          </details>
+          <details name="q">
             <summary>Can another agent use it?</summary>
             <p>Yes. Counterset is also an MCP server at <code>/mcp</code>, with tools to list days, audit a day, rescue a day and explain a pair. They read recorded Qloo rows and change nothing.</p>
           </details>
@@ -162,9 +167,12 @@
       <section class="close" data-ink="dark" aria-labelledby="close-title">
         <div class="end end-photo"><img src="/web/assets/photo/bonnaroo-main-gate2016.jpg" width="1919" height="739" alt="The Bonnaroo main gate lit up at night" loading="lazy" /></div>
         <div class="end end-main">
-          <h2 id="close-title">Run that Sunday yourself</h2>
-          <p>Open the replay and watch the agent work it, step by step, on the real timetable. Bring your own bill when you are done.</p>
-          <a class="button dark" href="/studio?day=bonnaroo-2026-sunday&amp;watch=1">Watch the agent work</a>
+          <h2 id="close-title">Now try your own lineup</h2>
+          <p>Paste any festival day. Qloo looks up your acts and ranks them live, the solver finds the clashes, and you can tell the agent what went wrong and watch it work.</p>
+          <div class="close-actions">
+            <a class="button dark" href="/studio?lineup=1">Try your own lineup</a>
+            <a class="text" href="/studio?day=bonnaroo-2026-sunday">Or run the Bonnaroo storm live</a>
+          </div>
         </div>
         <div class="end end-flat"></div>
       </section>

@@ -28,6 +28,8 @@ Rules:
 - If the message states a hard stop or last finish time, pass it as curfew on every try_rescue. Never extend past it. If it states none, pass null.
 - Try the gentlest rescue first: full-length sets with no drops. If that fails, try 75 percent with no drops. If that fails too, allow drops and work down: 100, then 85, then 75, then 60 percent. Use at most 7 try_rescue calls.
 - Stop as soon as a try keeps every set, or when a step down saves no more sets than the step before it. More sets playing beats longer sets; among equal rescues recommend the longer sets.
+- Read rules_in_conflict on any try that fails. If the same rule blocks every try, more relaxing will not help: call report_conflict and name it. Never repeat a try with the same terms.
+- If a try says no schedule was found in the time allowed, that is not proof. Try once more with different terms, then report it honestly if it still fails.
 - Do not record anything the message does not limit. Saying an act already played needs no tool: the day already locks it.
 - Before finishing, call compare_without_qloo on the rescue you recommend, compare_as_run if the day has a record of what really happened, and why_they_share_a_crowd for the most important clash you avoided.
 - finish needs a summary of at most 60 words for the programmer: how many sets play, which are dropped, minutes shortened, and what Qloo changed. Leave out total start shift. Use only numbers and names from tool results. Never claim attendance or ticket effects, and never give safety or crowd instructions.
@@ -45,6 +47,7 @@ TOOL_DOCS = {
     "compare_as_run": {"args": {"rescue_id": "from try_rescue"}, "does": "Score what the festival really did on the same terms."},
     "why_they_share_a_crowd": {"args": {"act_a": "id", "act_b": "id"}, "does": "Qloo's ranks for a pair and the taste tags their crowds share."},
     "finish": {"args": {"rescue_id": "the recommended rescue", "summary": "at most 60 words"}, "does": "Hand your recommendation to the programmer."},
+    "report_conflict": {"args": {"summary": "at most 60 words: why no plan fits, and what a person could change"}, "does": "End the run with no plan when no rescue works. Use the rules_in_conflict you were given."},
 }
 
 
@@ -121,6 +124,10 @@ class Session:
             if value + act["duration"] > act["latest"]:
                 raise ValueError(f"{act['name']} could no longer finish inside its window.")
             act["earliest"] = value
+            # A person has just said this set has not started, so it is no longer frozen in place.
+            draft = next(x for x in data["draft"] if x["act_id"] == act["id"])
+            if value > draft["start"]:
+                act["locked"] = False
             line = f"{act['name']} starts no earlier than {clock(value)}."
         elif args.get("limit") == "finish_by":
             if value - act["duration"] < act["earliest"]:
@@ -141,6 +148,23 @@ class Session:
         view = {"placements": [p.model_dump() for p in self.day.draft], "audit": checked}
         return line, {"broken_sets": broken, "clashes": clashes, "unknown_pairs_overlapping": unknown}, view
 
+    def known_schedule(self, scenario):
+        """A schedule already solved for these terms, if this day has one, as a place to start."""
+        table = self.context.get("rescue_table") or {}
+        if not scenario["allow_cut"]:
+            return None
+        row = next((r for r in table.get("rows", []) if r["curfew"] == scenario.get("curfew") and r["shortest"] == scenario["shortest"]), None)
+        return row["placements"] if row else None
+
+    def report_conflict(self, args):
+        failed = [r for r in self.rescues if not r["result"].get("placements")]
+        if not failed:
+            raise ValueError("Try a rescue first. If one worked, use finish.")
+        if any(r["result"].get("placements") for r in self.rescues):
+            raise ValueError("A rescue worked. Recommend it with finish.")
+        self.finished = {"rescue_id": None, "summary": str(args.get("summary", ""))}
+        return "No plan fits under these terms. Handed to the programmer with the rules in conflict.", {"done": True}, {}
+
     def try_rescue(self, args):
         # Models sometimes send "false" as text; only a real yes opens the option to drop a set.
         drop = args.get("allow_drop")
@@ -155,18 +179,23 @@ class Session:
         limit = self.context.get("storm", {}).get("curfew")
         if limit and scenario.get("curfew", 0) > limit:
             raise ValueError(f"The message's hard stop is {clock(limit)}. Do not extend past it.")
+        if len(self.rescues) >= 8:
+            raise ValueError("That is enough tries. Use finish on the best rescue, or report_conflict if none worked.")
+        if any(r["scenario"] == scenario for r in self.rescues):
+            raise ValueError("You already tried these terms. Change them, or use finish or report_conflict.")
         day = apply_scenario(self.day, scenario)
         budget = args.get("max_moves")
         budget = len(day.acts) if budget in (None, "null") else int(budget)
         priority = args.get("prefer") if args.get("prefer") in {"fewest_acts", "least_time_shift"} else "fewest_acts"
         edges = all_edges(day, self.evidence)
-        result = solve(day, edges, budget, self.seconds, priority)
+        result = solve(day, edges, budget, self.seconds, priority, self.known_schedule(scenario))
         rid = len(self.rescues)
         self.rescues.append({"scenario": scenario, "budget": budget, "priority": priority, "day": day, "result": result})
         if not result.get("placements"):
             return (
-                f"Try {rid + 1} ({self.terms(scenario)}): no schedule fits.",
-                {"rescue_id": rid, "status": result["status"], "rules_in_conflict": result.get("core", [])[:8], "note": result.get("core_scope")},
+                f"Try {rid + 1} ({self.terms(scenario)}): "
+                + ("no schedule fits." if result["status"] == "INFEASIBLE" else "no schedule found in the time allowed. This is not proof that none exists."),
+                {"rescue_id": rid, "status": result["status"], "proven_impossible": result["status"] == "INFEASIBLE", "rules_in_conflict": result.get("core", [])[:8], "note": result.get("core_scope")},
                 {"rescue_id": rid},
             )
         a = result["audit"]
@@ -211,6 +240,8 @@ class Session:
         lost_instead = [{"act": self.name(i), "qloo_popularity": draws[i]} for i in sorted(theirs - ours)]
         spared = [{"act": self.name(i), "qloo_popularity": draws[i]} for i in sorted(ours - theirs)]
         parts = []
+        if not blind.get("placements"):
+            return "The run without Qloo found no schedule in the time allowed, so this comparison is not available.", {"available": False, "pairs_only_qloo_kept_apart": [], "without_qloo_drops_instead": []}, {"rescue_id": rid}
         if blind.get("identical"):
             parts.append("Qloo changed nothing: the same schedule comes out without it.")
         if protected:
@@ -273,12 +304,12 @@ class Session:
         return "Recommendation handed to the programmer. Nothing has changed yet.", {"done": True}, {"rescue_id": rid}
 
 
-TOOLS = {"close_site", "close_stage", "limit_act", "audit", "try_rescue", "compare_without_qloo", "compare_as_run", "why_they_share_a_crowd", "finish"}
+TOOLS = {"close_site", "close_stage", "limit_act", "audit", "try_rescue", "compare_without_qloo", "compare_as_run", "why_they_share_a_crowd", "finish", "report_conflict"}
 
 
 def facts_for(session):
     """Every number the programmer's summary is allowed to contain."""
-    return numbers_in(json.dumps(session.tool_results))
+    return numbers_in(json.dumps(session.tool_results)) | numbers_in(session.message)
 
 
 def deterministic_summary(session, rid):
@@ -327,7 +358,7 @@ def run(day: Day, evidence, context, message, gateway, model, on_step=lambda ste
                 + "\nSTEPS SO FAR: " + json.dumps(history)
                 + "\nReply with the next tool call as JSON."
             )
-            decision, telemetry = gateway.model(prompt, model, max_tokens=4096)
+            decision, telemetry = gateway.model(prompt, model, max_tokens=16384)
             usage["model_calls"] += 1
             usage["tokens"] += telemetry.get("usage", {}).get("totalTokenCount", 0)
         decisions.append(decision)
@@ -370,6 +401,20 @@ def run(day: Day, evidence, context, message, gateway, model, on_step=lambda ste
         raise AgentStop("The agent ran out of steps without a recommendation. Nothing was applied.")
     rid = session.finished["rescue_id"]
     summary = session.finished["summary"].strip()
+    if rid is None:
+        core = next((r["result"].get("core") for r in reversed(session.rescues) if r["result"].get("core")), [])
+        unknown = numbers_in(summary) - facts_for(session)
+        return {
+            "session": session,
+            "trace": trace,
+            "decisions": decisions,
+            "rescue_id": None,
+            "summary": summary if summary and not unknown else "No plan fits under the terms tried. Review the rules in conflict.",
+            "summary_source": "model" if summary and not unknown else "deterministic",
+            "summary_rejected": None,
+            "usage": usage,
+            "core": core,
+        }
     allowed = facts_for(session) | numbers_in(json.dumps(session.rescues[rid]["result"]["audit"]["moved"]))
     unknown = numbers_in(summary) - allowed
     source = "model"
@@ -417,6 +462,21 @@ def to_proposal(outcome, day_before, other=None):
     """What a person reviews: the sandbox day, the chosen option and its counterfactual."""
     session = outcome["session"]
     rid = outcome["rescue_id"]
+    if rid is None:
+        return {
+            "status": "NO_PLAN",
+            "options": [],
+            "core": outcome.get("core", []),
+            "core_scope": "These rules cannot all hold together. Change one of them and run it again.",
+            "agent": True,
+            "no_plan": True,
+            "day": session.day.model_dump(),
+            "budget": len(session.day.acts),
+            "summary": outcome["summary"],
+            "summary_source": outcome["summary_source"],
+            "summary_rejected": None,
+            "notices": [],
+        }
     chosen = session.rescues[rid]
     option = dict(chosen["result"])
     option["without_qloo"] = session.compared.get(rid, {})

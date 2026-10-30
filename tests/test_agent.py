@@ -172,11 +172,10 @@ def test_live_failure_applies_nothing_and_says_so(tmp_path, monkeypatch):
     assert c.get(f"/api/projects/{p['id']}").json()["version"] == 1
 
 
-def test_public_mode_hides_workspaces_blocks_live_qloo_and_caps_agent(tmp_path, monkeypatch):
+def test_public_mode_hides_workspaces_and_caps_agent(tmp_path, monkeypatch):
     c, app, cfg = ready(tmp_path, public=True)
     p = c.post("/api/examples/mini", headers=H).json()
     assert c.get("/api/projects").json() == []
-    assert c.post("/api/resolve", headers=H, json={"query": "x"}).status_code == 403
     assert c.post(f"/api/projects/{p['id']}/evidence", headers=H, json={"version": 1, "source": "live"}).status_code == 403
     monkeypatch.setattr(app.state.gateway, "model", lambda *a, **k: (_ for _ in ()).throw(ProviderError("down")))
     first = c.post(f"/api/projects/{p['id']}/agent", headers=H, json={"version": 1, "text": MESSAGE, "mode": "live"})
@@ -317,3 +316,123 @@ def test_saved_replay_shows_saved_steps_and_validator_rechecks(tmp_path):
     p = c.post("/api/examples/mini", headers=H).json()
     j = finish(c, c.post(f"/api/projects/{p['id']}/agent", headers=H, json={"version": 1, "text": MESSAGE, "mode": "replay"}).json()["job_id"])
     assert j["status"] == "FAILED" and "validator" in j["error"]
+
+
+# ---------- Your own lineup: live Qloo with the key on the server ----------
+LINES = "Main | Mitski | 20:00 | 21:00\nMain | Big Thief | 21:15 | 22:15\nTent | Ali Wong | 20:30 | 21:15 | comedy\nTent | Unknown Local Band | 21:30 | 22:00"
+
+
+def test_lineup_parser_reads_a_day_and_explains_mistakes():
+    from app.lineup import parse
+
+    d = parse("Mine", LINES)
+    assert [s.name for s in d.stages] == ["Main", "Tent"]
+    assert next(a for a in d.acts if a.name == "Ali Wong").kind == "comedian"
+    assert d.acts[0].duration == 60 and d.acts[0].changeover == 15
+    assert parse("X", "A, One, 23:30, 00:30\nA, Two, 00:45, 01:30").draft[1].start == 1485
+    for bad, words in [("A | One | 9pm | 10pm\nA | Two | 11:00 | 12:00", "not a time"), ("only one line", "stage | act"), ("A | One | 20:00 | 21:00\nA | Two | 20:30 | 21:30", "overlap"), ("A | One | 20:00 | 21:00\nB | One | 22:00 | 23:00", "once")]:
+        with pytest.raises(ValueError, match=words):
+            parse("X", bad)
+
+
+class FakeQloo:
+    def __init__(self):
+        self.calls = []
+
+    def qloo(self, path, params, refresh=False, offline=False):
+        self.calls.append(path)
+        if path == "/search":
+            q = params["query"]
+            return {"results": {"entities": [] if "Unknown" in q else [{"entity_id": "%08x-0000-0000-0000-000000000000" % (abs(hash(q)) % 2**32), "name": q, "popularity": 0.9}]}}, "live"
+        if path == "/v2/insights":
+            ids = params["filter.results.entities"].split(",")
+            seed = params["signal.interests.entities"]
+            return {"results": {"entities": [{"entity_id": e, "query": {"affinity": 0.9 - i / 10}} for i, e in enumerate(x for x in ids if x != seed)]}}, "live"
+        return {"results": {"tags": [{"name": "Indie"}, {"name": "United States"}]}}, "live"
+
+    def cached_at(self, *a):
+        return time.time()
+
+    def budget(self):
+        return {"qloo_successes": 0, "qloo_limit": 5000, "model_attempts": 0, "model_limit": 60}
+
+
+def test_public_visitor_runs_a_lineup_live_within_caps_and_never_sees_the_key(tmp_path, monkeypatch):
+    c, app, cfg = ready(tmp_path, public=True)
+    cfg.qloo_key = "secret-qloo-key"
+    cfg.qloo_per_hour = 20
+    fake = FakeQloo()
+    for name in ("qloo", "cached_at", "budget"):
+        monkeypatch.setattr(app.state.gateway, name, getattr(fake, name))
+    config = c.get("/api/config")
+    assert config.json()["qloo_configured"] is True and "secret-qloo-key" not in config.text
+    p = c.post("/api/lineups", headers=H, json={"name": "Mine", "text": LINES}).json()
+    j = finish(c, c.post(f"/api/projects/{p['id']}/identify", headers=H, json={"version": 1}).json()["job_id"])
+    assert j["status"] == "COMPLETED", j
+    assert j["result"]["found"] == ["Mitski", "Big Thief", "Ali Wong"] and j["result"]["total"] == 4
+    state = c.get(f"/api/projects/{p['id']}").json()
+    assert sum(bool(a["qloo_id"]) for a in state["day"]["acts"]) == 3
+    e = finish(c, c.post(f"/api/projects/{p['id']}/evidence", headers=H, json={"version": state["version"], "source": "live"}).json()["job_id"])
+    assert e["status"] == "COMPLETED", e
+    state = c.get(f"/api/projects/{p['id']}").json()
+    assert state["evidence_state"]["loaded"] and "secret-qloo-key" not in json.dumps(state)
+    assert "/v2/insights" in fake.calls
+    # The next visitor's bill would pass this visitor's hourly share, so it is refused.
+    over = c.post(f"/api/projects/{p['id']}/evidence", headers=H, json={"version": state["version"], "source": "live"})
+    assert over.status_code == 429
+
+
+def test_public_visitor_cannot_spend_qloo_on_a_worked_example(tmp_path):
+    c, app, cfg = ready(tmp_path, public=True)
+    cfg.qloo_key = "secret-qloo-key"
+    p = c.post("/api/examples/mini", headers=H).json()
+    assert c.post(f"/api/projects/{p['id']}/evidence", headers=H, json={"version": 1, "source": "live"}).status_code == 403
+    assert c.post(f"/api/projects/{p['id']}/identify", headers=H, json={"version": 1}).status_code == 403
+
+
+def test_a_time_out_is_never_reported_as_impossible():
+    # A hundredth of a second is not enough to answer, and the agent must say so plainly.
+    out = desk_agent.Session(day(), EVIDENCE, CONTEXT, MESSAGE)
+    out.seconds = 0.001
+    line, result, _ = out.try_rescue({"shortest_percent": 100, "allow_drop": False})
+    assert "no schedule fits" not in line or result["status"] == "INFEASIBLE"
+
+
+def test_saying_an_act_has_not_started_lifts_the_automatic_freeze():
+    data = day().model_dump()
+    data["auto_lock_started"] = True
+    s = desk_agent.Session(Day.model_validate(data), EVIDENCE, {}, MESSAGE)
+    s.close_stage({"stage_id": "a", "start": "16:00", "end": "17:00", "quote": "Save what you can."})
+    assert next(a for a in s.day.acts if a.id == "x0").locked
+    s.limit_act({"act_id": "x0", "limit": "not_before", "time": "16:30", "quote": "Save what you can."})
+    assert not next(a for a in s.day.acts if a.id == "x0").locked
+
+
+def test_agent_can_end_honestly_when_nothing_fits_and_cannot_repeat_itself():
+    data = day().model_dump()
+    data["acts"][0]["locked"] = True
+    d = Day.model_validate(data)
+    decisions = [
+        {"tool": "close_site", "args": {"start": "13:50", "end": "15:00", "quote": "Save what you can."}},
+        {"tool": "try_rescue", "args": {"shortest_percent": 100, "allow_drop": False}},
+        {"tool": "try_rescue", "args": {"shortest_percent": 100, "allow_drop": False}},
+        {"tool": "report_conflict", "args": {"summary": "Act 0 is locked inside the closure."}},
+    ]
+    out = desk_agent.run(d, EVIDENCE, {}, MESSAGE, None, "m", turns=decisions, seconds=3)
+    assert not out["trace"][2]["ok"] and "already tried" in out["trace"][2]["line"]
+    assert out["rescue_id"] is None and out["core"]
+    proposal = desk_agent.to_proposal(out, d)
+    assert proposal["no_plan"] and proposal["options"] == [] and proposal["core"]
+
+
+def test_a_set_that_finished_before_a_closure_does_not_block_it():
+    from app.repair import hold_stage
+    from app.validator import audit as recount
+
+    data = day().model_dump()
+    data["auto_lock_started"] = True
+    data["acts"][0]["changeover"] = 30
+    d = hold_stage(Day.model_validate(data), "a", 900, 960, "Closed")
+    x0 = next(a for a in d.acts if a.id == "x0")
+    assert x0.locked and x0.changeover == 0
+    assert not [e for e in recount(d, d.draft, [])["errors"] if "Act 0" in e]
