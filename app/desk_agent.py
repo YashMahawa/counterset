@@ -15,6 +15,7 @@ import time
 from .agent import clock, numbers_in, to_minutes
 from .domain import Day, Placement, canonical_pair
 from .evidence import all_edges, attendee_edges
+from .providers import ProviderError
 from .repair import apply_scenario, as_run_audit, counterfactual, hold_stage, placements, site_hold
 from .solver import solve
 from .validator import audit
@@ -324,6 +325,16 @@ def deterministic_summary(session, rid):
     return text
 
 
+def ask_model(gateway, prompt, model):
+    """A free model now and then returns a broken reply. Asking again costs one call; a stopped run costs the person a minute."""
+    for attempt in range(3):
+        try:
+            return gateway.model(prompt, model, max_tokens=16384)
+        except ProviderError as e:
+            if attempt == 2 or not ("invalid JSON" in str(e) or "did not complete" in str(e) or "must return an object" in str(e)):
+                raise
+
+
 def run(day: Day, evidence, context, message, gateway, model, on_step=lambda step: None, turns=None, seconds=6, sleep=0):
     """Runs the loop. `turns` replays recorded model decisions instead of calling a model."""
     session = Session(day, evidence, context, message)
@@ -358,7 +369,7 @@ def run(day: Day, evidence, context, message, gateway, model, on_step=lambda ste
                 + "\nSTEPS SO FAR: " + json.dumps(history)
                 + "\nReply with the next tool call as JSON."
             )
-            decision, telemetry = gateway.model(prompt, model, max_tokens=16384)
+            decision, telemetry = ask_model(gateway, prompt, model)
             usage["model_calls"] += 1
             usage["tokens"] += telemetry.get("usage", {}).get("totalTokenCount", 0)
         decisions.append(decision)

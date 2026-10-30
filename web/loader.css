@@ -1,0 +1,136 @@
+/* The opening: the mark assembles, the orange set slides into its slot, and the screen lifts away.
+   Nothing here waits for script: the animation ends on its own and the page is always underneath. */
+.loader {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 20px;
+  background: #000;
+  color: #fff;
+  font-family: "Albert Sans", system-ui, sans-serif;
+  animation: loader-lift 0.55s cubic-bezier(0.76, 0, 0.24, 1) 1.55s forwards;
+}
+.loader svg {
+  display: block;
+  width: min(52vw, 320px);
+  height: min(52vw, 320px);
+  overflow: visible;
+}
+.loader rect {
+  fill: #fff;
+  animation: 0.5s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+.loader .l-top {
+  animation-name: loader-from-right;
+  animation-delay: 0.05s;
+}
+.loader .l-left {
+  animation-name: loader-from-left;
+  animation-delay: 0.17s;
+}
+.loader .l-bottom {
+  animation-name: loader-from-right;
+  animation-delay: 0.29s;
+}
+.loader .l-set {
+  fill: #f4581f;
+  animation-name: loader-into-slot;
+  animation-duration: 0.62s;
+  animation-delay: 0.55s;
+  animation-timing-function: cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.loader span {
+  display: block;
+  font-size: clamp(28px, 5vw, 44px);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  animation: loader-word 0.4s ease-out 0.95s both;
+}
+@keyframes loader-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+@keyframes loader-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+@keyframes loader-into-slot {
+  from {
+    opacity: 0;
+    transform: translateX(26px);
+  }
+}
+@keyframes loader-word {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes loader-lift {
+  to {
+    transform: translateY(-100%);
+    visibility: hidden;
+  }
+}
+/* Arriving from another page: the mark is already whole, and the cover lifts. */
+.loader-arrive .loader {
+  animation: loader-lift 0.5s cubic-bezier(0.76, 0, 0.24, 1) 0.28s forwards;
+}
+.loader-arrive .loader rect,
+.loader-arrive .loader span {
+  animation: none;
+}
+/* Leaving for another page: the cover rises and the mark assembles quickly. */
+.loader.leaving {
+  animation: loader-cover 0.34s cubic-bezier(0.76, 0, 0.24, 1) both;
+}
+.loader.leaving rect {
+  animation-duration: 0.26s;
+}
+.loader.leaving .l-top {
+  animation-delay: 0.1s;
+}
+.loader.leaving .l-left {
+  animation-delay: 0.14s;
+}
+.loader.leaving .l-bottom {
+  animation-delay: 0.18s;
+}
+.loader.leaving .l-set {
+  animation-duration: 0.3s;
+  animation-delay: 0.2s;
+}
+.loader.leaving span {
+  animation: loader-word 0.2s ease-out 0.2s both;
+}
+@keyframes loader-cover {
+  from {
+    transform: translateY(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loader rect,
+  .loader span,
+  .loader-arrive .loader rect,
+  .loader-arrive .loader span {
+    animation: none;
+  }
+  .loader,
+  .loader-arrive .loader {
+    animation: loader-fade 0.3s linear 0.7s forwards;
+  }
+  @keyframes loader-fade {
+    to {
+      opacity: 0;
+      visibility: hidden;
+    }
+  }
+}

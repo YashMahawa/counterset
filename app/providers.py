@@ -194,9 +194,13 @@ class Gateway:
         try:
             result = json.loads(text)
         except ValueError:
-            raise ProviderError(
-                "Model returned invalid JSON; no action applied"
-            ) from None
+            # A model sometimes wraps the object in a sentence: the object is still the answer.
+            try:
+                result = json.loads(text[text.index("{") : text.rindex("}") + 1])
+            except ValueError:
+                raise ProviderError(
+                    "Model returned invalid JSON; no action applied"
+                ) from None
         if not isinstance(result, dict):
             raise ProviderError("Model must return an object")
         return result, {

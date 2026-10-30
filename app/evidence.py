@@ -213,7 +213,7 @@ def explain_pairs(day: Day, evidence, gateway, limit=6):
 
 
 def identity_key(day: Day):
-    return [(a.id, a.qloo_id, a.kind) for a in day.acts] + [day.k]
+    return sorted(((a.id, a.qloo_id, a.kind) for a in day.acts), key=lambda x: x[0]) + [day.k]
 
 
 def all_edges(day, evidence):

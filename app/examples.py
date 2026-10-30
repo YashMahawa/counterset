@@ -6,6 +6,8 @@ ignored private folder. A fresh clone has none and must query its own lineup.
 
 import json
 from fastapi import HTTPException
+from . import lineup
+from .domain import Day
 
 
 class Examples:
@@ -31,6 +33,16 @@ class Examples:
                 }
             )
         return sorted(out, key=lambda x: x["order"])
+
+    def templates(self):
+        """The days offered to try, as text a person can change."""
+        out = []
+        for item in self.list():
+            data = self.get(item["id"])
+            day = Day.model_validate(data["day"])
+            c = data["context"]
+            out.append({"id": item["id"], "name": day.name, "title": c["title"], "why": c.get("why", c.get("summary", "")), "text": lineup.text_of(day), "message": c.get("sample_message", ""), "acts": item["acts"], "stages": item["stages"], "source": c.get("source")})
+        return out
 
     def get(self, example_id):
         f = self.folder / f"{example_id}.json"

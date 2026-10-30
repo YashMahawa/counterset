@@ -116,6 +116,7 @@ class Identity(Versioned):
 class Lineup(Strict):
     name: str = Field(default="Your lineup", max_length=100)
     text: str = Field(min_length=1, max_length=6000)
+    template: str | None = Field(default=None, max_length=100)
 
 
 class Resolve(Strict):
@@ -312,7 +313,11 @@ def create_app(config=None):
     def open_example(example_id: str, request: Request):
         day_allowed(request)
         ex = examples.get(example_id)
-        return new_project(Day.model_validate(ex["day"]), ex.get("evidence"), ex["context"])
+        return new_project(Day.model_validate(ex["day"]), ex.get("evidence"), {**ex["context"], "template": example_id})
+
+    @app.get("/api/templates")
+    def templates():
+        return examples.templates()
 
     @app.get("/api/projects/{id}")
     def project(id):
@@ -379,11 +384,29 @@ def create_app(config=None):
     @app.post("/api/lineups")
     def own_lineup(req: Lineup, request: Request):
         day_allowed(request)
+        if req.template:
+            return from_template(req)
         day = lineup.parse(req.name, req.text)
         return new_project(day, {}, own_context(day))
 
+    def from_template(req):
+        """An untouched template opens whole. An edited one keeps what is still true of it."""
+        ex = examples.get(req.template)
+        base = Day.model_validate(ex["day"])
+        if lineup.same_lines(req.text, lineup.text_of(base)):
+            base.name = req.name[:100] or base.name
+            return new_project(base, ex.get("evidence"), {**ex["context"], "template": req.template})
+        day = lineup.revise(base, req.text)
+        kept = len({a.id for a in day.acts} & {a.id for a in base.acts})
+        day.name = req.name[:100] or base.name
+        same = {(a.id, a.qloo_id, a.kind) for a in day.acts} == {(a.id, a.qloo_id, a.kind) for a in base.acts}
+        context = own_context(day)
+        if kept * 2 >= len(day.acts):
+            context["sample_message"] = ex["context"].get("sample_message")
+        return new_project(day, ex.get("evidence") if same else {}, context)
+
     def own_context(day):
-        return {"kind": "own", "title": day.name, "note": "Your lineup. Stages, changeovers and availability are assumed from what you pasted: edit any act to correct them."}
+        return {"kind": "own", "title": day.name, "note": "Your lineup. Stages, changeovers and availability are assumed from what you pasted."}
 
     @app.post("/api/lineups/restore")
     def restore_lineup(day: Day, request: Request):

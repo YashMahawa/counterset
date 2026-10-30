@@ -57,10 +57,10 @@ A programmer reviewing these plans without being told which signal produced them
 ## Demo script (about 2 minutes)
 
 1. **The storm (15 s).** Public page: “A storm took 11 sets.” Say the date and the place.
-2. **Try it (25 s).** Press `00:00` and `Full`: 24 of 28. Press `75%`: 27 of 28. Press **Show what really happened**: 17. Read the sentence about assumptions aloud.
-3. **Watch the agent (45 s).** Press **Or watch it rebuild that day**. Point at the first failures, then the relaxing. Each step is a real tool call, and the timetable moves.
+2. **Try it (25 s).** Press `00:00` and `Full`: 24 of 28. Press `75%`: 27 of 28. Press **What really happened**: 17. Read the sentence about assumptions aloud.
+3. **Watch the agent (45 s).** Open the Bonnaroo day, press **Check this day**, then press Enter on the message. Point at the first failures, then the relaxing. Each step is a real tool call, and the timetable moves.
 4. **What Qloo changed (15 s).** Press **Without Qloo**. Name what it dropped, and the extra clashes.
 5. **A person decides (10 s).** Open the drafted messages, then press **Approve**. Nothing changed until now.
-6. **Your own lineup (20 s).** Press **Build my day**, keep the sample, and show Qloo finding the acts and ranking music against comedy live. Drag one set and read the audit change.
+6. **A live day (20 s).** Open Outside Lands Saturday. The Strokes × The xx is at the top of the clashes. Press Enter on the message: 3 clashes go to 0, and **Without Qloo** shows all 3 staying.
 
 All production rules are assumed. No festival or performer is affiliated with the project.

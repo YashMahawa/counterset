@@ -942,3 +942,83 @@ details code {
     transition: none;
   }
 }
+
+/* ---------- The days to try ---------- */
+.mint.try {
+  display: block;
+  min-height: 0;
+}
+.try h2 {
+  margin: 0;
+}
+.try-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 24px;
+  margin: 20px 0 28px;
+  padding: 0;
+  list-style: none;
+  font-size: clamp(1.0625rem, 1.5vw, 1.375rem);
+  line-height: 1.25;
+}
+.try-steps strong {
+  display: block;
+  font-size: clamp(2rem, 3.4vw, 3.25rem);
+  font-weight: 600;
+  line-height: 1;
+}
+.try-days {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.try-days a {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 170px;
+  padding: 16px;
+  background: #000;
+  color: #fff;
+  text-decoration: none;
+}
+.try-days a:hover {
+  background: #f4581f;
+  color: #000;
+}
+.try-days strong {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+.try-days span {
+  font-size: 0.9375rem;
+  line-height: 1.35;
+}
+.jobs-short article p {
+  font-size: 1.0625rem;
+  line-height: 1.45;
+}
+@media (max-width: 860px) {
+  .try-days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .try-days a {
+    min-height: 0;
+  }
+}
+@media (max-width: 560px) {
+  .try-steps,
+  .try-days {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .try-steps strong {
+    display: inline;
+    font-size: 1.25rem;
+    margin-right: 6px;
+  }
+}
+.jobs-short {
+  margin-top: clamp(24px, 3vw, 40px);
+}

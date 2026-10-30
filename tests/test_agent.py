@@ -471,7 +471,7 @@ def test_a_browser_can_restore_its_own_day_but_not_a_larger_one(tmp_path):
     p = c.post("/api/lineups", headers=H, json={"name": "Mine", "text": EDITED}).json()
     back = c.post("/api/lineups/restore", headers=H, json=p["day"])
     assert back.status_code == 200 and back.json()["context"]["kind"] == "own" and back.json()["id"] != p["id"]
-    big = lineup.parse("Big", "\n".join(f"Main | Act {i} | {10 + i // 2:02}:{30 * (i % 2):02} | {10 + i // 2:02}:{30 * (i % 2) + 20:02}" for i in range(24))).model_dump()
+    big = lineup.parse("Big", "\n".join(f"Main | Act {i} | {10 + i // 2:02}:{30 * (i % 2):02} | {10 + i // 2:02}:{30 * (i % 2) + 20:02}" for i in range(30))).model_dump()
     big["acts"].append({**big["acts"][0], "id": "extra", "name": "Extra"})
     big["draft"].append({"act_id": "extra", "stage_id": big["stages"][0]["id"], "start": 1300})
     assert c.post("/api/lineups/restore", headers=H, json=big).status_code == 422
@@ -515,3 +515,60 @@ def test_a_hand_made_repair_drafts_messages_when_approved(tmp_path):
     pub = c.post(f"/api/projects/{p['id']}/publish", headers=H, json={"version": 1, "proposal_id": j["result"]["proposal_id"], "option": 0}).json()
     versions = c.get(f"/api/projects/{p['id']}").json()["versions"]
     assert versions[0]["notices"] == pub["notices"]
+
+
+def template_app(tmp_path, public=False):
+    c, app, cfg = ready(tmp_path, public=public)
+    (tmp_path / "examples/mini.json").write_text(json.dumps({"day": lineup.parse("Mini", EDITED).model_dump(), "evidence": {"id": "e", "edges": [], "unknown": [], "ranks": {}, "sizes": {}}, "context": {"kind": "retrospective", "title": "Mini", "why": "Because", "sample_message": "Main is closed 19:00 to 20:00."}}))
+    return c
+
+
+def test_templates_are_offered_as_text_a_person_can_change(tmp_path):
+    c = template_app(tmp_path)
+    t = next(x for x in c.get("/api/templates").json() if x["id"] == "mini")
+    assert t["why"] == "Because" and "Mitski" in t["text"] and t["message"].startswith("Main")
+
+
+def test_an_untouched_template_opens_whole_however_it_was_spaced(tmp_path):
+    c = template_app(tmp_path)
+    text = "\n".join(line.replace(" | ", "|") for line in EDITED.splitlines())
+    p = c.post("/api/lineups", headers=H, json={"name": "Mini", "text": text, "template": "mini"}).json()
+    assert p["context"]["kind"] == "retrospective" and p["context"]["template"] == "mini" and p["evidence"]["id"] == "e"
+
+
+def test_changing_only_times_on_a_template_keeps_its_evidence_and_message(tmp_path):
+    c = template_app(tmp_path)
+    p = c.post("/api/lineups", headers=H, json={"name": "Mini", "text": EDITED.replace("19:00 | 20:00", "18:00 | 19:00"), "template": "mini"}).json()
+    assert p["context"]["kind"] == "own" and p["evidence"]["id"] == "e" and p["context"]["sample_message"].startswith("Main")
+    assert c.get(f"/api/projects/{p['id']}").json()["day"]["draft"]
+
+
+def test_adding_an_act_to_a_template_reads_qloo_again(tmp_path):
+    c = template_app(tmp_path)
+    p = c.post("/api/lineups", headers=H, json={"name": "Mini", "text": EDITED + "\nTent | Yard Act | 21:00 | 21:45", "template": "mini"}).json()
+    assert p["context"]["kind"] == "own" and p["evidence"] == {} and p["context"]["sample_message"]
+
+
+def test_replacing_a_template_with_anything_leaves_nothing_of_it(tmp_path):
+    c = template_app(tmp_path)
+    p = c.post("/api/lineups", headers=H, json={"name": "Other", "text": "A | Geese | 12:00 | 13:00\nB | Wet Leg | 14:00 | 15:00", "template": "mini"}).json()
+    assert p["day"]["name"] == "Other" and p["evidence"] == {} and "sample_message" not in p["context"]
+    assert p["day"]["stages"][0]["closes"] == 15 * 60 + 60
+
+
+def test_a_template_that_does_not_exist_is_refused(tmp_path):
+    c = template_app(tmp_path)
+    assert c.post("/api/lineups", headers=H, json={"name": "X", "text": EDITED, "template": "../secret"}).status_code == 404
+
+
+def test_a_broken_model_reply_is_asked_again_before_the_run_stops():
+    class Flaky:
+        calls = 0
+
+        def model(self, prompt, model, max_tokens=0):
+            Flaky.calls += 1
+            if Flaky.calls == 1:
+                raise ProviderError("Model returned invalid JSON; no action applied")
+            return {"tool": "audit"}, {}
+
+    assert desk_agent.ask_model(Flaky(), "p", "m")[0] == {"tool": "audit"} and Flaky.calls == 2

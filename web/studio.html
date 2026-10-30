@@ -3,29 +3,37 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Counterset — rescue desk</title>
+    <title>Counterset</title>
     <link rel="preload" href="/web/assets/albert-sans.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/web/bar.css?v=2" />
-    <link rel="stylesheet" href="/web/studio.css?v=6" />
+    <script src="/web/loader.js?v=2"></script>
+    <link rel="stylesheet" href="/web/loader.css?v=4" />
+    <link rel="stylesheet" href="/web/bar.css?v=3" />
+    <link rel="stylesheet" href="/web/studio.css?v=9" />
     <link rel="icon" href="/web/assets/icon.svg" type="image/svg+xml" />
-    <script src="/web/studio.js?v=8" type="module"></script>
+    <script src="/web/studio.js?v=10" type="module"></script>
   </head>
-  <body data-mode="walk">
-    <a class="skip" href="#grid">Skip to the timetable</a>
+  <body data-ui="simple">
+    <div class="loader" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><rect class="l-top" x="8" y="2" width="14" height="6" /><rect class="l-left" x="2" y="9" width="8" height="6" /><rect class="l-set" x="12" y="9" width="7" height="6" /><rect class="l-bottom" x="8" y="16" width="14" height="6" /></svg>
+      <span>Counterset</span>
+    </div>
+    <a class="skip" href="#main">Skip to the page</a>
     <header class="top bar">
       <a class="brand" href="/" aria-label="Counterset home">
         <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="14" height="6" /><rect x="2" y="9" width="8" height="6" /><rect class="logo-set" x="12" y="9" width="7" height="6" /><rect x="8" y="16" width="14" height="6" /></svg>
         <span>Counterset</span>
       </a>
-      <a class="days-link" href="/studio">Your days</a>
-      <span class="day-now"><strong id="day-name"></strong><span id="day-meta"></span></span>
+      <ol class="path" id="path" aria-label="Where you are">
+        <li id="path-1"><button data-action="path-day">1 Your day</button></li>
+        <li id="path-2"><span>2 Fix it</span></li>
+        <li id="path-3"><span>3 Send it</span></li>
+      </ol>
       <div class="top-end">
         <span id="budget-stamp" class="stamp"></span>
         <div class="mode" role="group" aria-label="Interface mode">
           <button id="mode-walk" aria-pressed="true">Guided</button
           ><button id="mode-desk" aria-pressed="false">Desk</button>
         </div>
-        <a id="own-lineup" class="bar-cta" href="/studio?lineup=1">New day</a>
         <button id="tools" class="quiet" aria-haspopup="menu" aria-expanded="false">Tools</button>
         <div id="tools-menu" class="menu" role="menu" hidden>
           <button role="menuitem" id="edit-lineup">Edit the lineup</button>
@@ -36,48 +44,50 @@
           <button role="menuitem" id="auth">Access token</button>
           <button role="menuitem" id="mode-toggle" class="phone-only">Switch guided / desk</button>
         </div>
+        <button id="ui-toggle" class="quiet">All the details</button>
       </div>
     </header>
 
     <main class="home" id="home" hidden>
-      <section class="new-day" aria-labelledby="new-title">
-        <h1 id="new-title">Start a new day</h1>
-        <p>Paste your festival day, one set per line: stage, act, start, end. Add comedy, podcast or talk as a last column for other kinds of act. Spreadsheet rows work too.</p>
-        <form id="new-form">
-          <label>Name of the day<input id="l-name" value="My festival" maxlength="100" required /></label>
-          <label>Lineup<textarea id="l-text" rows="13" spellcheck="false" required></textarea></label>
-          <div class="new-actions">
-            <button class="primary" id="l-go">Look up these acts in Qloo</button>
-            <label class="file-button">Choose a CSV file<input type="file" id="l-file" accept=".csv,.tsv,.txt,text/csv,text/plain" /></label>
-          </div>
-          <p class="status error" id="new-error" role="alert"></p>
-        </form>
-        <p class="fine">A sample is filled in, so you can press the button straight away. It uses real acts on an invented grid. Up to 24 sets on this server.</p>
-        <p class="fine">Act names go to Qloo, and anything you give the agent goes to Google's Gemini API, through keys held on the server. Do not paste anything confidential.</p>
-      </section>
-      <section class="your-days" aria-labelledby="days-title">
-        <h2 id="days-title">Your days</h2>
+      <h1 id="new-title">Pick a real festival day, or paste yours</h1>
+      <p class="home-say">Counterset finds acts that share a crowd and play at the same time. When the day breaks, an agent rebuilds it and you approve.</p>
+      <div id="templates" class="templates" aria-label="Days to try"></div>
+      <form id="new-form" class="new-form">
+        <div class="lineup-head">
+          <label for="l-text">The lineup. Change anything.</label>
+          <button type="button" class="link" id="l-clear">Clear it and paste mine</button>
+        </div>
+        <textarea id="l-text" rows="11" spellcheck="false" required placeholder="Main | Mitski | 20:30 | 21:30"></textarea>
+        <p class="format">One set per line: <code>stage | act | start | end</code>. Add <code>comedy</code>, <code>podcast</code> or <code>talk</code> at the end for other acts. Spreadsheet rows work too.</p>
+        <div class="new-actions">
+          <label class="name-field">Name of the day<input id="l-name" maxlength="100" required /></label>
+          <label class="file-button">Use a CSV file<input type="file" id="l-file" accept=".csv,.tsv,.txt,text/csv,text/plain" /></label>
+          <button class="primary big" id="l-go">Check this day</button>
+        </div>
+        <p class="status error" id="new-error" role="alert"></p>
+      </form>
+      <section class="your-days" id="days-box" hidden>
+        <h2>Days you opened</h2>
         <div id="days-list"></div>
-        <h2>Worked examples</h2>
-        <div id="examples-list" class="choices"></div>
-        <label class="file-button quiet-file">Import a saved day<input type="file" id="import-home" accept="application/json" /></label>
       </section>
+      <p class="fine home-fine">Act names go to Qloo and your messages go to Google's Gemini API, through keys held on the server. Do not paste anything confidential. <label class="import-link">Import a saved day<input type="file" id="import-home" accept="application/json" /></label></p>
     </main>
 
     <main class="sheet" id="sheet">
-      <nav id="steps" class="steps" aria-label="Steps"></nav>
+      <section id="flow" class="flow" aria-live="polite"></section>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
 
+      <nav id="steps" class="steps" aria-label="Steps"></nav>
       <div class="title-row">
         <div class="title-text">
           <h1 id="step-title">Counterset</h1>
           <p id="step-finding" class="finding"></p>
           <p id="step-lead" class="lead"></p>
-          <p id="status" class="status" role="status" aria-live="polite"></p>
         </div>
         <div id="step-actions" class="actions"></div>
       </div>
 
-      <section class="card timetable" aria-label="Timetable">
+      <section class="card timetable" id="main" aria-label="Timetable">
         <header class="card-head">
           <div id="views" class="views" role="tablist" aria-label="Which timetable to show"></div>
           <div id="legend" class="legend"></div>
@@ -87,6 +97,9 @@
         </div>
         <p id="context" class="card-foot"></p>
       </section>
+
+      <section id="flow-detail" class="flow-detail" hidden></section>
+      <section id="flow-after" class="flow-after"></section>
 
       <section class="card work">
         <div id="panel" class="panel"></div>

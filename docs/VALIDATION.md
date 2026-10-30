@@ -114,3 +114,15 @@ No paid key, no other model and no fabricated result was used.
 - The LLM-only comparison failed at the token limit. The limit was raised, and incomplete responses now report their finish reason.
 
 No customer, festival deployment, attendance effect or paid integration is claimed.
+
+## The four days to try
+
+`scripts/build_templates.py` builds three of them from published set times and real Qloo rows. Before any of them shipped, a closure sweep and live agent runs confirmed that each one shows real clashes and that the example problem has a clean answer. In live runs with `gemini-3.5-flash-lite`:
+
+| Day | Example problem | Result | Without Qloo |
+| --- | --- | --- | --- |
+| Outside Lands 2026, Saturday | Sutro closed 16:20–17:20 | 14 of 14 play, 3 clashes to 0, 4 sets move | All 3 clashes stay |
+| Lollapalooza 2024, Saturday evening | Ethel Cain not before 18:30 | 21 of 21 play, 4 clashes to 0, 4 sets move | 4 pairs clash |
+| Outside Lands 2026, Friday | Twin Peaks closed 17:10–17:55 | All sets play, 2 clashes to 0 | Subtronics × Odd Mob stays |
+
+These are single runs on an assumed set of stage sizes and artist hours. The first trial runs had no such limits, and one sent a small band five hours later onto a main stage. That is why the limits exist. An agent run also stopped once on a broken reply from the free model, so a broken reply is now asked again up to twice.

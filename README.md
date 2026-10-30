@@ -18,14 +18,24 @@ This shows what was open, not what the festival should have done. It assumes eve
 
 **https://counterset-5e45c193.agichaos.dev** (no sign-in). If it has been idle, the first visit takes up to a minute to wake.
 
-1. **Bring your day.** Press **Start with your lineup** and paste a festival day, or keep the sample and press **Build my day**. CSV files and spreadsheet rows work too. Qloo finds each act live and you check the matches.
-2. **Read the crowds.** Press **These look right**. Qloo ranks your bill live, and the timetable shows who shares a crowd and who clashes.
-3. **Fix it by hand.** Drag a set to another time or stage. The audit answers as soon as you drop it, and **Undo** puts it back. Press **Edit the lineup** to change the bill as text.
-4. **Break the day.** Open **The agent**, say what went wrong, such as “Sutro stage is closed 17:30 to 18:30”, and press **Run it live**. The real model chooses tools and the solver answers each try, in about a minute on a small lineup.
-5. **Decide and send.** Press **Without Qloo** to see the same rescue with Qloo removed. Press **Approve**: the validator rechecks the plan and saves a numbered version. You then get a timetable link to share, a CSV and a drafted message for each affected act.
-6. **Come back later.** **Your days** lists your days in this browser. Every day has its own link.
-7. **See the real storm.** On the public page, make the two choices under **Could more sets have played that Sunday?**, or press **What really happened** to compare. **Run it live** works on that day too, in about 4 minutes on this small server. **Watch the agent** shows one saved run in about 20 seconds, labelled as saved.
-8. **From any MCP client,** add `/mcp` and call `rescue_day`.
+1. **Pick a day.** Four real timetables are ready, each with real Qloo rows and real clashes. Change any line, or press **Clear it and paste mine** and paste your own: stage, act, start, end. CSV files and spreadsheet rows work too. Press **Check this day**.
+2. **See the clashes.** Each one says how long the acts overlap, how Qloo ranks them against each other and what their crowds share. A day you pasted is looked up and read by Qloo without another button. Drag a set to fix one by hand.
+3. **Say what went wrong, and press Enter.** An example problem is filled in, and you can replace it with anything. The agent records the problem and the solver answers each try. This takes about a minute on a small lineup, and the timetable moves as it works.
+4. **Decide.** Compare **Before**, **After** and **Without Qloo**, then press **Approve this plan**. The validator rechecks the plan and saves a numbered version.
+5. **Send it.** You get a timetable link to share and a drafted message for each affected act. Counterset never sends anything itself.
+
+**All the details** in the top bar opens the full desk: identities, evidence, rescue terms, repair options, comparisons, exports and JSON. From an MCP client, add `/mcp` and call `rescue_day`.
+
+### The four days
+
+| Day | What it shows | Is it real? |
+| --- | --- | --- |
+| Outside Lands 2026, Saturday | The Strokes × The xx is each act's closest match on the bill, 50 minutes at once. A one-hour closure at Sutro is the chance to fix all three clashes. Without Qloo, all three stay. | Published set times and real Qloo rows. The problem is an example. |
+| Bonnaroo 2026, Sunday | The storm. 27 of 28 sets could have played, against 17 on the day. | Published timetable and reported cancellations. The unchanged message plays a saved run, labelled as saved. Change a word and it runs live. |
+| Lollapalooza 2024, Saturday evening | Ethel Cain arrives late, and the obvious new slot lands on Romy, her closest match. | The published sets from 16:00 on six stages. The problem is an example. |
+| Outside Lands 2026, Friday | Subtronics × Odd Mob overlap for 90 minutes, and each is the other's closest match. | Published set times and real Qloo rows. The problem is an example. |
+
+Stage sizes and artist hours (about two hours either side of the published set) are assumed on the example days. We looked for a published timetable mixing music, comedy and podcasts and found none with set times, so all four are music. Comedy, podcasts and talks work in any lineup you paste, using a last column.
 
 ### How the API keys are protected
 
@@ -42,8 +52,8 @@ This free server is small: a tenth of a CPU core, and it restarts after 15 idle 
 
 | Criterion | Where to look |
 | --- | --- |
-| **Technological implementation** | A tool-calling agent over a constraint solver (OR-Tools CP-SAT), with a separate pure-Python validator that recounts every rule and objective. 68 tests, including brute-force checks of the solver. Qloo is used through three endpoints: see [Exactly how Qloo is used](#exactly-how-qloo-is-used). |
-| **Design** | One flow, from a pasted lineup to an approved version and a shared timetable. One look across the site, with a single top bar and logo. The timetable moves as the agent works. Plain language throughout, with the technical detail one click away. Works at phone width and with reduced motion. |
+| **Technological implementation** | A tool-calling agent over a constraint solver (OR-Tools CP-SAT), with a separate pure-Python validator that recounts every rule and objective. 75 tests, including brute-force checks of the solver. Qloo is used through three endpoints: see [Exactly how Qloo is used](#exactly-how-qloo-is-used). |
+| **Design** | One path of three steps, from a real day or a pasted lineup to an approved version and a shared timetable. One look across the site, with a single top bar and logo. The timetable moves as the agent works. Plain language throughout, with the technical detail one click away. Works at phone width and with reduced motion. |
 | **Potential impact** | A specific person (the festival programmer) and a recurring problem: [seven festivals were hit by weather in 2026 that we found in the press](#why-this-problem). A real day, real timetable and real cancellations, with the limits stated. |
 | **Quality of the idea** | Taste data used to schedule, not to recommend. Qloo decides which sets must not play at once and which set to lose first, across music, comedy and podcasts. Every result can be compared with the same solver without Qloo, and the app says when Qloo changed nothing. |
 
@@ -76,7 +86,7 @@ In the recorded run, the model tries full-length sets with no drops and is told 
 - Extend a hard stop, or follow an instruction hidden in the message.
 - Change anything. A finished run is a proposal. A person approves it, and the validator runs again first.
 
-If the model fails, nothing is applied and the app says why. “Watch the agent” needs no model at all, so the demo survives an exhausted quota.
+If the model fails, nothing is applied and the app says why. The saved Bonnaroo run needs no model at all, so that day survives an exhausted quota.
 
 ## Exactly how Qloo is used
 

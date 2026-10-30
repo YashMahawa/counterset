@@ -68,7 +68,7 @@ Controller rules: a quote must be an exact part of the message; a curfew may not
 
 A finished run is a proposal carrying its own day (the closures and rescue terms) and the hash of the day it started from. Publishing re-checks the hash and re-runs the validator. Models cannot call Qloo, produce placements, approve or publish.
 
-**Replay.** `record_agent.py` stores only the model's decisions. “Watch the agent” replays them and runs every tool again, so solver and validator results are live; it needs no model and refuses a changed day or message.
+**Replay.** `record_agent.py` stores only the model's decisions. The saved run on the Bonnaroo day replays them and runs every tool again, so solver and validator results are live; it needs no model and refuses a changed day or message.
 
 The older message reader in `agent.py` is still the “Something changes” step: it proposes typed items, each with an exact quote, for a person to tick.
 

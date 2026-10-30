@@ -1,4 +1,4 @@
-// Public page: one live control over the real replay, one step-through of the agent, and small motion.
+// Public page: the days to try, one live control over the real replay, and small motion.
 // Everything the page says about the replay is read from the solver's table, never typed in here.
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -132,7 +132,6 @@ async function startLive() {
     const r = await fetch("/api/rescue-table");
     if (!r.ok) throw Error("No table");
     table = await r.json();
-    const names = table.as_run.cancelled;
     controls();
     drawBase();
     draw();
@@ -151,84 +150,9 @@ async function startLive() {
         draw();
       }, 150);
     });
-    return names;
   } catch {
     live.classList.add("no-live");
-    return null;
   }
-}
-
-// ---------- The names ----------
-function names(list) {
-  const fall = ["Nat Myers", "Little Stranger", "Buffalo Traffic Jam", "Girl Tones", "MOTIFV", "Aly & AJ", "Spacey Jane", "Hemlocke Springs", "Blondshell", "A Hundred Drums", "Trombone Shorty"];
-  const use = list || fall;
-  const line = use.map((n) => `<span>${esc(n)}</span>`).join("");
-  $("#track").innerHTML = line + line;
-}
-
-// ---------- The agent, step by step (each line is from the recorded run) ----------
-const STAGES = [
-  {
-    name: "Reads",
-    clause: "First it reads the message",
-    say: "A programmer pastes what production said. The agent records each closure and limit, and every one must quote the message word for word.",
-    frag: () => `<h3>Message from production</h3>
-      <p class="msg">13:00. Lightning in the area. <mark>Centeroo is being evacuated and every stage is closed.</mark> Site ops expect to reopen at 17:15. Noah Kahan, Kesha and Modest Mouse must play in full. <mark>Hard stop is midnight.</mark> What can we save?</p>
-      <p class="line"><strong>Closed the site.</strong> All 5 stages closed 13:00–17:15.</p>
-      <p class="line"><strong>Checked the grid.</strong> The closure breaks 16 of 28 published sets.</p>`,
-  },
-  {
-    name: "Tries",
-    clause: "Then it tries the gentlest fix",
-    say: "It starts with full-length sets and no drops. When the solver proves that cannot work, it relaxes one term and tries again.",
-    frag: () => `<h3>Rescues it tried</h3>
-      <p class="line no"><strong>Full length, no drops.</strong> No schedule fits.</p>
-      <p class="line no"><strong>Shrink to 75%, no drops.</strong> No schedule fits.</p>
-      <p class="line"><strong>Full length, drops allowed.</strong> 24 of 28 sets play.</p>
-      <p class="line"><strong>Shrink to 85%, drops allowed.</strong> 25 of 28 sets play.</p>
-      <p class="line yes"><strong>Shrink to 75%, drops allowed.</strong> 27 of 28 sets play.</p>
-      <p class="line"><strong>Shrink to 60%, drops allowed.</strong> Still 27, so it stops.</p>`,
-  },
-  {
-    name: "Checks",
-    clause: "It checks itself against the day",
-    say: "It solves the same rescue with all Qloo evidence removed, then scores what the festival really did. A separate validator recounts everything.",
-    frag: () => `<h3>Same day, three ways</h3>
-      <p class="line"><strong>What really happened.</strong> 11 sets cancelled, 1 shared-crowd clash.</p>
-      <p class="line"><strong>Without Qloo.</strong> 1 more shared-crowd pair clashes, and it drops Japanese Breakfast in place of Little Stranger.</p>
-      <p class="line yes"><strong>With Qloo.</strong> 1 dropped, 0 shared-crowd clashes.</p>
-      <p class="note">The figures here come from a recorded run. Each run in the studio solves them again.</p>`,
-  },
-  {
-    name: "Hands over",
-    clause: "Then a person decides",
-    say: "It writes a short recommendation and drafts a message to every affected act. It cannot approve or send anything.",
-    frag: () => `<h3>Waiting for you</h3>
-      <p class="line"><strong>The recommendation.</strong> 27 of 28 sets play. Little Stranger is dropped. 145 minutes are shortened across 12 sets.</p>
-      <p class="line"><strong>Drafted for each act.</strong> “New slot, set runs shorter. Please confirm you can do this.”</p>
-      <span class="approve">Approve as v1</span>
-      <p class="note">Approving rechecks every rule and saves a numbered version you can export.</p>`,
-  },
-];
-function stage(i) {
-  const s = STAGES[i];
-  const frag = $("#stage-frag");
-  frag.classList.add("swap");
-  setTimeout(() => {
-    $("#stage-clause").textContent = s.clause;
-    $("#stage-say").textContent = s.say;
-    frag.innerHTML = s.frag();
-    frag.classList.remove("swap");
-  }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 200);
-  document.querySelectorAll("#stage-names button").forEach((b, n) => b.setAttribute("aria-current", n === i ? "step" : "false"));
-}
-function startStages() {
-  $("#stage-names").innerHTML = STAGES.map((s, i) => `<li><button type="button" data-i="${i}">${esc(s.name)}</button></li>`).join("");
-  $("#stage-names").onclick = (e) => {
-    const b = e.target.closest("button");
-    if (b) stage(+b.dataset.i);
-  };
-  stage(0);
 }
 
 // ---------- Motion ----------
@@ -236,7 +160,7 @@ function startMotion() {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   // Each section's parts rise in turn, once. Content is only hidden once script is running.
   const parts = document.querySelectorAll(
-    "section h2:not(.visually-hidden), .start-text p, .journey, .start-form, .replay-top p, .replay, .assume, .plain, blockquote, .lede, .jobs article, .fine, .tile, .mosaic figure, .faq details, .end, .stage-ui, #stage-say, .stage-rail, .places, .foot-notes",
+    "section h2:not(.visually-hidden), .try-steps, .try-days, .replay-top p, .replay, .assume, .jobs article, .faq details, .end, .places, .foot-notes",
   );
   const seen = new IntersectionObserver(
     (entries) => {
@@ -259,33 +183,16 @@ function startMotion() {
   });
 }
 
-// ---------- Your own day ----------
-function startForm() {
-  const form = $("#start-form");
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const button = $("button", form);
-    const error = $("#start-error");
-    error.textContent = "";
-    button.disabled = true;
-    try {
-      const r = await fetch("/api/lineups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Counterset": "workspace" },
-        body: JSON.stringify({ name: $("#start-name").value, text: $("#start-text").value }),
-      });
-      const out = await r.json().catch(() => ({}));
-      if (!r.ok) throw Error(typeof out.detail === "string" ? out.detail : "That did not work. Check the lines and try again.");
-      location.href = `/studio?project=${encodeURIComponent(out.id)}&identify=1`;
-    } catch (err) {
-      error.textContent = err.message;
-      button.disabled = false;
-    }
-  };
+// ---------- The days to try ----------
+async function startDays() {
+  try {
+    const r = await fetch("/api/templates");
+    if (!r.ok) return;
+    const days = await r.json();
+    if (days.length) $("#try-days").innerHTML = days.map((d) => `<a href="/studio?template=${encodeURIComponent(d.id)}"><strong>${esc(d.title)}</strong><span>${esc(d.why)}</span></a>`).join("");
+  } catch {}
 }
 
 startMotion();
-startForm();
-startStages();
-names(null);
-startLive().then((list) => list && names(list));
+startDays();
+startLive();

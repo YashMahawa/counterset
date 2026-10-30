@@ -49,7 +49,16 @@ const S = {
   terms: null,
   rescueOpen: null,
   typed: {},
+  // The simple path: 1 your day, 2 fix it, 3 send it. All the details stay one click away.
+  ui: "simple",
+  loading: null,
+  problem: null,
+  again: false,
+  templates: [],
+  template: null,
+  editing: null,
 };
+const simple = () => S.ui === "simple";
 
 // The CSP forbids inline style attributes, so geometry travels in data-css and is
 // applied through the CSSOM after each render.
@@ -115,7 +124,7 @@ async function guarded(fn) {
 const day = () => S.project.day;
 const act = (id) => day().acts.find((a) => a.id === id);
 const stage = (id) => day().stages.find((s) => s.id === id);
-const ev = () => S.project.evidence || {};
+const ev = () => S.project?.evidence || {};
 const hasEvidence = () => !!ev().id;
 const confirmed = () => day().acts.filter((a) => a.qloo_id).length;
 const current = () => S.proposal && S.proposal.input_version === S.project.version;
@@ -726,6 +735,222 @@ function diffList(places, keep = true) {
   return rows ? `<table class="stack"><thead><tr><th>Act</th><th class="num">From → to</th><th class="num">Shift</th>${keep ? "<th></th>" : ""}</tr></thead><tbody>${rows}</tbody></table>` : `<p class="empty">No set moves.</p>`;
 }
 
+// ---------- The simple path ----------
+const VAGUE = new Set(["Diverse", "Varied", "Moderate", "Simple", "Engaging", "Energetic", "Loyal", "Love", "Expressive", "Passionate", "Modernism", "Rhythmic", "Melodic", "Catchy", "Vocals", "Guitar", "Drums", "Bass Guitar", "Keyboard", "Piano", "Marches", "Work Songs", "Spirituals", "Ragtime", "Futurism", "Folk", "Blues", "Singer & Songwriter"]);
+function tasteWords(a, b) {
+  const tags = ev().explain?.[[a, b].sort().join("|")] || [];
+  return tags.filter((t) => !VAGUE.has(t)).slice(0, 3);
+}
+// Why a clash matters, in the words of the Qloo result it came from.
+function whyClash(c) {
+  const e = (ev().edges || []).find((x) => cueKey(x.a, x.b) === cueKey(c.a, c.b));
+  const parts = [`${c.minutes} minutes at once`];
+  if (e) {
+    const best = e.ranks[0] === 1 && e.ranks[1] === 1;
+    parts.push(best ? "each other's closest match on this bill" : `each ranks the other in its top ${Math.max(...e.ranks)} of ${e.of[0]} on this bill`);
+  } else if (c.source === "must_see") parts.push(`${c.weight} attendee picks`);
+  const words = tasteWords(c.a, c.b);
+  if (words.length) parts.push(`both crowds lean ${words.join(", ")}`);
+  return parts.join(" · ");
+}
+function clashList(audit, limit = S.allClashes ? 99 : 4) {
+  const list = audit.conflicts.filter((c) => c.source === "qloo" || c.source === "must_see").sort((x, y) => y.minutes - x.minutes);
+  const rows = list
+    .slice(0, limit)
+    .map((c) => `<li><button class="clash-row" data-action="pair" data-a="${esc(c.a)}" data-b="${esc(c.b)}"><strong>${pairName(c.a, c.b)}</strong><span>${esc(whyClash(c))}</span></button></li>`)
+    .join("");
+  return `<ul class="clashes">${rows}</ul>${list.length > limit ? `<button class="link" data-action="more-clashes">Show ${list.length - limit} more</button>` : ""}`;
+}
+function missingLine() {
+  const open = day().acts.filter((a) => !a.qloo_id);
+  if (!open.length) return "";
+  const names = open.length <= 3 ? ` (${open.map((a) => esc(a.name)).join(", ")})` : "";
+  return `<p class="fine">Qloo has no exact match for ${plural(open.length, "act")}${names}, so their clashes are unknown, not zero. <button class="link" data-action="identities">Find them</button></p>`;
+}
+function askForm() {
+  const a = S.agent;
+  const typed = S.typed.agent ?? (S.again ? "" : a?.message || S.proposal?.message || sampleMessage());
+  const recorded = hasRecording() && typed === S.project.context.recorded_run.message;
+  const offline = !S.config.model_configured && !hasRecording();
+  return `<form class="ask" id="ask">
+    <label for="agent-message">What went wrong?</label>
+    <textarea id="agent-message" rows="${Math.min(8, Math.max(4, Math.ceil(typed.length / 58) + 1))}" placeholder="Main stage is closed 18:00 to 19:00. Curfew is 23:00.">${esc(typed)}</textarea>
+    ${a?.error ? `<p class="status error">${esc(a.error)}</p>` : ""}
+    <div class="ask-foot"><button class="primary big" id="ask-go" ${offline ? "disabled" : ""}>Fix this day</button><span class="hint"><kbd>Enter</kbd> starts it. Nothing changes until you approve.</span></div>
+    <p class="fine" id="ask-note">${recorded ? "This is what really happened that day. It plays a saved run of the agent. Change the words for a live run." : S.project.context?.template && !S.again ? "An example problem. Replace it with anything." : ""}${offline ? " No model is set up on this server." : ""}</p>
+  </form>`;
+}
+function headline(strong, rest = "") {
+  return `<h1 class="headline"><strong>${strong}</strong>${rest ? ` ${rest}` : ""}</h1>`;
+}
+function flowFix() {
+  const a = S.project.audit;
+  const n = a.conflicts.filter((c) => c.source === "qloo" || c.source === "must_see").length;
+  const why = S.project.context?.why;
+  return `<div class="flow-grid"><div class="flow-left">
+      <p class="eyebrow">${esc(day().name)} · <button class="link" data-action="path-day">Change the lineup</button></p>
+      ${n ? headline(plural(n, "clash", "clashes"), "in this day") : headline("No clashes", "in this day")}
+      <p class="flow-say">${S.project.context?.kind === "replay" && why ? `${esc(why)} ` : ""}${n ? `Qloo says these acts share a crowd, and they play at the same time. Fans have to choose.` : `No acts that share a crowd play at the same time.`}</p>
+      ${n ? clashList(a) : ""}
+      ${missingLine()}
+    </div>${askForm()}</div>`;
+}
+function flowRunning() {
+  const trace = S.agent?.trace || [];
+  const last = trace.at(-1);
+  return `<div class="flow-run">
+    <p class="eyebrow">${S.agent?.mode === "live" ? "Live run: the model is deciding now" : "Saved run of the agent"}</p>
+    ${headline("Working on it")}
+    <p class="flow-say">${last?.thought ? esc(last.thought) : "Reading what you wrote…"}</p>
+    <ol class="live-steps">${trace.map((t) => `<li class="${t.ok ? "" : "refused"}"><strong>${esc(TOOL_WORDS[t.tool] || "Tried a step")}</strong> ${esc(t.line)}</li>`).join("")}<li class="now"><span class="spin" aria-hidden="true"></span>${trace.length ? "Next step…" : "Starting…"}</li></ol>
+  </div>`;
+}
+function flowPlan() {
+  const o = finalOption();
+  const a = o.audit;
+  const total = day().acts.length;
+  const before = S.project.audit.conflicts.filter((c) => c.source === "qloo" || c.source === "must_see").length;
+  const left = a.conflicts.filter((c) => c.source === "qloo" || c.source === "must_see").length;
+  const ran = S.project.as_run_audit;
+  const lost = a.cuts.length;
+  const blind = o.without_qloo || {};
+  const prot = blind.protected || [];
+  const extra = (blind.dropped || []).filter((id) => !a.cuts.includes(id));
+  const qloo = prot.length
+    ? `Without Qloo, ${prot.map((x) => `<strong>${pairName(x.a, x.b)}</strong>`).join(", ")} would still clash.`
+    : extra.length
+      ? `Without Qloo it would drop ${extra.map((id) => `<strong>${esc(act(id).name)}</strong>`).join(", ")} instead.`
+      : blind.identical
+        ? "On this problem the same plan comes out without Qloo."
+        : "Without Qloo the plan differs but leaves no extra clash.";
+  return `<div class="flow-plan">
+    <div>
+      <p class="eyebrow">${S.agent?.mode === "live" ? "Plan from a live run" : "Plan from a saved run"} · nothing has changed yet</p>
+      ${headline(lost ? `${total - lost} of ${total} sets play.` : `All ${total} sets play.`, `${left ? plural(left, "clash", "clashes") : "No clashes"} left.`)}
+      <ul class="tally">
+        <li><strong>${before} → ${left}</strong> clashes</li>
+        <li><strong>${a.moves}</strong> ${a.moves === 1 ? "set moves" : "sets move"}</li>
+        <li><strong>${a.trim_minutes}</strong> minutes shorter</li>
+        <li><strong>${lost}</strong> dropped${ran ? `, ${ran.cuts.length} on the real day` : ""}</li>
+      </ul>
+      <p class="flow-say">${qloo}</p>
+    </div>
+    <div class="flow-decide">
+      <button class="primary big" data-action="publish" data-option="0" id="approve">Approve this plan</button>
+      <button data-action="retry">Change what went wrong</button>
+    </div>
+  </div>`;
+}
+function flowNoPlan() {
+  return `<div class="flow-grid"><div class="flow-left">
+    ${headline("No plan fits.")}
+    <p class="flow-say">${esc(S.proposal.summary)}</p>
+    ${(S.proposal.core || []).slice(0, 4).map((c) => `<p class="note bad">${esc(c)}</p>`).join("")}
+    <p class="fine">Nothing has changed. Change what went wrong, or the lineup, and try again.</p>
+  </div>${askForm()}</div>`;
+}
+function flowSent() {
+  const v = S.project.versions.at(-1);
+  return `<div class="flow-sent">
+    <div><p class="eyebrow">${esc(day().name)}</p>${headline(`Approved as version ${v.number}.`, "Send it out.")}
+    <p class="flow-say">Share the timetable, and copy each act its message. Counterset never sends anything itself.</p></div>
+    <div class="flow-decide"><button data-action="again">Something else went wrong</button></div>
+  </div>`;
+}
+function flowLoading() {
+  return `<div class="flow-run"><p class="eyebrow">${esc(day().name)}</p>${headline("Reading this day")}<p class="flow-say">${esc(S.loading)}</p></div>`;
+}
+function flowProblem() {
+  return `<div class="flow-run"><p class="eyebrow">${esc(day().name)}</p>${headline("Qloo could not read this day yet.")}<p class="flow-say">${esc(S.problem)}</p>
+    <div class="flow-decide row"><button class="primary" data-action="prepare">Try again</button><button data-action="identities">Find acts by hand</button><button data-action="path-day">Change the lineup</button></div></div>`;
+}
+function flowStage() {
+  if (S.loading) return "loading";
+  if (S.agentRunning) return "running";
+  if (finalOption()) return "plan";
+  if (noPlan()) return "noplan";
+  if (S.project.status === "PUBLISHED" && S.project.versions.length && !S.again) return "sent";
+  if (!hasEvidence() && S.problem) return "problem";
+  if (!hasEvidence()) return "problem";
+  return "fix";
+}
+function renderFlow() {
+  const stage = flowStage();
+  const draw = { loading: flowLoading, running: flowRunning, plan: flowPlan, noplan: flowNoPlan, sent: flowSent, problem: flowProblem, fix: flowFix }[stage];
+  if (stage === "problem" && !S.problem) S.problem = S.config.qloo_configured ? "Press Try again to read it." : "No Qloo key is set up on this server.";
+  const flow = $("#flow");
+  flow.innerHTML = draw();
+  flow.dataset.stage = stage;
+  renderPath(stage);
+  renderAfter(stage);
+  const box = $("#agent-message");
+  if (box) {
+    box.oninput = () => {
+      S.typed.agent = box.value;
+      const note = $("#ask-note");
+      if (note && hasRecording() && box.value !== S.project.context.recorded_run.message) note.textContent = "A live run: the model decides each step now. It takes a minute or two.";
+    };
+    box.onkeydown = (e) => {
+      // Enter starts the work. Shift+Enter still makes a new line.
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        startFix();
+      }
+    };
+    $("#ask").onsubmit = (e) => {
+      e.preventDefault();
+      startFix();
+    };
+    // Ready for Enter straight away on a computer. A phone keeps its keyboard closed.
+    if (matchMedia("(pointer: fine)").matches && S.lastStage !== "fix" && !$("#dialog").open) {
+      box.focus({ preventScroll: true });
+      box.setSelectionRange(box.value.length, box.value.length);
+    }
+  }
+  const live = $(".live-steps");
+  if (live) live.scrollTop = live.scrollHeight;
+  S.lastStage = stage;
+}
+function startFix() {
+  const box = $("#agent-message");
+  const text = box.value.trim();
+  if (!text) {
+    say("Say what went wrong first, in your own words.", true);
+    box.focus();
+    return;
+  }
+  const recorded = hasRecording() && box.value === S.project.context.recorded_run.message;
+  guarded(() => actions.agent({ dataset: { mode: recorded ? "replay" : "live" } }));
+}
+function renderPath(stage) {
+  const on = !stage ? 1 : stage === "sent" ? 3 : 2;
+  [1, 2, 3].forEach((n) => {
+    const li = $(`#path-${n}`);
+    li.className = n === on ? "on" : n < on ? "done" : "";
+    if (n === on) li.setAttribute("aria-current", "step");
+    else li.removeAttribute("aria-current");
+  });
+}
+function renderAfter(stage) {
+  const box = $("#flow-after");
+  let out = "";
+  if (stage === "plan") {
+    const o = finalOption();
+    out = `<details class="more" ${o.audit.moves + o.audit.cuts.length <= 8 ? "open" : ""}><summary>What moves (${plural(o.audit.moves + o.audit.cuts.length, "set")})</summary>${diffList(o.placements, false)}</details>
+    <details class="more"><summary>Messages drafted for ${plural(S.proposal.notices.length, "act")}</summary><ul class="notices">${S.proposal.notices.map((n) => `<li>${esc(n.text)}</li>`).join("")}</ul></details>
+    <details class="more"><summary>How the agent got there (${plural(S.agent?.trace?.length || 0, "step")})</summary><p>${esc(S.proposal.summary)}</p>${traceList()}<p class="fine">${provenLine(o)} Every number comes from the solver, and a separate validator rechecks the plan.</p></details>`;
+  } else if (stage === "sent") {
+    out = `<div class="more">${sendOut(S.project.versions.at(-1))}</div>`;
+  }
+  box.innerHTML = out;
+  applyCss(box);
+  if ($("#share-link")) guarded(() => fillShare(S.project.versions.at(-1)));
+}
+function renderWork() {
+  if (simple()) renderFlow();
+  else renderStep();
+}
+
 function renderSteps() {
   $("#steps").innerHTML = STEPS.map(
     (s, i) => `<button class="step" data-action="step" data-index="${i}" aria-current="${i === S.step ? "step" : "false"}"><span class="long">${s.tab}</span><span class="short">${s.short}</span><small>${esc(s.state())}</small></button>`,
@@ -1033,13 +1258,14 @@ function renderThreads(g, places, audit, focus) {
 
 function viewList() {
   const replay = !!S.project.as_run_audit;
-  const views = [["draft", S.project.status === "PUBLISHED" ? `Published v${S.project.versions.at(-1)?.number}` : replay ? "As published" : "Current draft"]];
+  const planned = simple() && !!finalOption();
+  const views = [["draft", planned ? "Before" : S.project.status === "PUBLISHED" ? `Approved v${S.project.versions.at(-1)?.number}` : replay ? "As published" : "Timetable"]];
   if (replay) views.push(["asrun", "What really happened"]);
   if (S.view.startsWith("step") && stepOf(S.view)) views.push([S.view, `Agent, step ${S.view.slice(4)}`]);
   if (current())
     S.proposal.options.forEach((o, i) => {
       if (!o.placements?.length || o.same_as !== undefined) return;
-      views.push([`opt${i}`, S.proposal.agent ? "Agent's rescue" : `Option ${letter(i)}`]);
+      views.push([`opt${i}`, S.proposal.agent ? (simple() ? "After" : "Agent's rescue") : `Option ${letter(i)}`]);
       if (o.without_qloo?.placements && !o.without_qloo.identical) views.push([`blind${i}`, S.proposal.agent ? "Without Qloo" : `${letter(i)} without Qloo`]);
     });
   return views;
@@ -1051,7 +1277,9 @@ function settleView() {
 function renderViews() {
   const views = viewList();
   $("#views").innerHTML =
-    views.length === 1
+    simple() && S.agentRunning
+      ? `<span class="solo">The plan so far</span>`
+      : views.length === 1
       ? `<span class="solo">${views[0][1]}</span>`
       : views.map(([v, label]) => `<button role="tab" class="${v.startsWith("blind") ? "blind" : ""}" data-action="view" data-view="${v}" aria-selected="${v === S.view}">${label}</button>`).join("");
   const on = $('#views [aria-selected="true"]');
@@ -1065,21 +1293,28 @@ function renderLegend() {
   if (hasEvidence()) items.push(`<span><i class="clash"></i>Clash</span>`);
   if (S.view !== "draft") items.push(`<span><i class="moved"></i>Moved (outline: old slot)</span>`);
   if ((placementsFor(S.view) || []).some((p) => p.length)) items.push(`<span><i class="short"></i>Shortened</span>`);
-  if (day().acts.some((a) => !a.qloo_id)) items.push(`<span><i class="unknown"></i>Unresolved</span>`);
+  if (day().acts.some((a) => !a.qloo_id)) items.push(`<span><i class="unknown"></i>Not in Qloo</span>`);
   if (holdsFor(S.view).length) items.push(`<span><i class="hold"></i>Closed</span>`);
   if ((auditFor(S.view) || S.project.audit).invalid?.length) items.push(`<span><i class="invalid"></i>Breaks a rule</span>`);
   if (S.view === "draft" && matchMedia("(pointer: fine)").matches && !S.agentRunning) items.push(`<span class="hint">Drag a set to move it</span>`);
-  $("#legend").innerHTML = items.join("") + (hasEvidence() ? `<button class="quiet" data-action="cues" aria-pressed="${S.allCues}">${S.allCues ? "Hide" : "Show"} all pairs</button>` : "");
+  $("#legend").innerHTML = items.join("") + (hasEvidence() && !simple() ? `<button class="quiet" data-action="cues" aria-pressed="${S.allCues}">${S.allCues ? "Hide" : "Show"} all pairs</button>` : "");
 }
 
 // ---------- Inspector ----------
 function renderInspector() {
-  const box = $("#inspector");
   const sel = S.selected;
+  if (simple()) {
+    const box = $("#flow-detail");
+    box.hidden = !sel;
+    box.innerHTML = sel?.act ? actPanel(sel.act) : sel?.pair ? pairPanel(...sel.pair) : "";
+    applyCss(box);
+    return;
+  }
+  const box = $("#inspector");
   box.innerHTML = sel?.act ? actPanel(sel.act) : sel?.pair ? pairPanel(...sel.pair) : STEPS[S.step].aside();
   applyCss(box);
 }
-const back = `<button class="link" data-action="deselect">← Back to ${"this step"}</button>`;
+const back = `<button class="link" data-action="deselect">Close</button>`;
 function actPanel(id) {
   const a = act(id);
   const places = placementsFor(S.view) || day().draft;
@@ -1147,16 +1382,13 @@ function lensLines(a, b) {
 function render() {
   settleView();
   const p = S.project;
-  $("#day-name").textContent = day().name;
   document.title = `${day().name} — Counterset`;
-  const last = p.versions.at(-1);
-  const state = p.status === "PUBLISHED" && last ? `v${last.number} published` : last ? `draft, changed since v${last.number}` : "draft";
-  $("#day-meta").textContent = `${day().acts.length} acts · ${day().stages.length} stages · ${state}`;
   document.body.dataset.public = S.config.public ? "yes" : "no";
   $("#budget-stamp").textContent = S.config.public ? "Recorded Qloo rows" : `Qloo ${S.config.budget.qloo_successes.toLocaleString()} of ${S.config.budget.qloo_limit.toLocaleString()} calls`;
-  $("#context").textContent = p.context?.note || "";
+  const c = p.context || {};
+  $("#context").innerHTML = `${esc(c.note || "")}${c.source ? ` <a href="${esc(c.source)}" target="_blank" rel="noreferrer">Published timetable</a>` : ""}`;
   remember();
-  renderStep();
+  renderWork();
   renderGrid();
   renderInspector();
 }
@@ -1181,6 +1413,10 @@ async function openProject(id) {
   S.rescueOpen = null;
   S.typed = {};
   S.undo = null;
+  S.loading = null;
+  S.problem = null;
+  S.again = false;
+  S.lastStage = null;
   const saved = store.get("counterset-step-" + id);
   S.step = saved !== null ? +saved : S.project.context?.recorded_run ? stepIndex("agent") : stepIndex("bill");
   if (S.proposal?.agent && !S.proposal.no_plan) S.view = "opt0";
@@ -1214,43 +1450,92 @@ function showDesk() {
   $("#home").hidden = true;
   $("#sheet").hidden = false;
 }
+function renderTemplates() {
+  $("#templates").innerHTML = S.templates
+    .map((t) => `<button type="button" class="template" data-action="template" data-id="${esc(t.id)}" aria-pressed="${S.template === t.id}"><strong>${esc(t.title)}</strong><span>${esc(t.why)}</span><small>${t.acts} sets · ${t.stages} stages · real timetable</small></button>`)
+    .join("");
+}
+function useTemplate(id) {
+  const t = S.templates.find((x) => x.id === id);
+  if (!t) return;
+  S.template = id;
+  S.editing = null;
+  $("#l-text").value = t.text;
+  $("#l-name").value = t.name;
+  $("#new-error").textContent = "";
+  renderTemplates();
+}
 async function showHome(focus = false) {
   document.body.dataset.view = "home";
   $("#sheet").hidden = true;
   $("#home").hidden = false;
+  renderPath(null);
+  document.title = "Counterset";
+  S.project = null;
+  if (!S.templates.length) S.templates = await api("/templates");
+  if (!$("#l-text").value) {
+    const wanted = new URLSearchParams(location.search).get("template");
+    useTemplate(S.templates.some((t) => t.id === wanted) ? wanted : S.templates[0]?.id);
+  }
+  if (!$("#l-text").value) $("#l-text").value = SAMPLE_LINEUP;
+  renderTemplates();
   history.replaceState(null, "", "/studio");
-  document.title = "Your days — Counterset";
-  const box = $("#l-text");
-  if (!box.value) box.value = SAMPLE_LINEUP;
   let days = savedDays();
   if (!S.config.public) {
     const known = new Set(days.map((x) => x.id));
     const server = await api("/projects");
-    days = [...days, ...server.filter((x) => !known.has(x.id)).map((x) => ({ id: x.id, name: x.name, state: `version ${x.version}` }))].slice(0, 12);
+    days = [...days, ...server.filter((x) => !known.has(x.id)).map((x) => ({ id: x.id, name: x.name, state: `version ${x.version}` }))].slice(0, 6);
   }
-  $("#days-list").innerHTML = days.length
-    ? `<ul class="day-list">${days
-        .map(
-          (x) => `<li><a href="/studio?project=${encodeURIComponent(x.id)}"><strong>${esc(x.name)}</strong><small>${x.acts ? `${x.acts} acts · ${x.stages} stages · ` : ""}${esc(x.state || "")}</small></a><button class="link" data-action="forget" data-id="${esc(x.id)}" aria-label="Remove ${esc(x.name)} from this list">Remove</button></li>`,
-        )
-        .join("")}</ul>`
-    : `<p class="empty">Days you open are listed here, in this browser.</p>`;
-  $("#examples-list").innerHTML = S.config.examples.map((e) => `<a class="choice" href="/studio?day=${encodeURIComponent(e.id)}">${esc(e.title)}<small>${esc(e.summary)} · ${e.acts} acts · ${e.stages} stages</small></a>`).join("") || `<p class="fine">No worked examples on this installation.</p>`;
+  $("#days-box").hidden = !days.length;
+  $("#days-list").innerHTML = `<ul class="day-list">${days
+    .map(
+      (x) => `<li><a href="/studio?project=${encodeURIComponent(x.id)}"><strong>${esc(x.name)}</strong><small>${x.acts ? `${x.acts} sets · ` : ""}${esc(x.state || "")}</small></a><button class="link" data-action="forget" data-id="${esc(x.id)}" aria-label="Remove ${esc(x.name)} from this list">Remove</button></li>`,
+    )
+    .join("")}</ul>`;
   if (focus && !reduced()) $("#new-title").scrollIntoView({ block: "start" });
 }
-// Create the day, then fill in what Qloo knows about each act for a person to check.
+// Create the day, then read it. A person presses one button; Qloo's two steps follow by themselves.
 async function beginLineup(name, text) {
-  const p = await api("/lineups", "POST", { name, text });
-  await openProject(p.id);
-  await lookUpActs();
+  if (S.editing) {
+    const id = S.editing;
+    const was = await api(`/projects/${id}`);
+    await api(`/projects/${id}/lineup`, "PUT", { version: was.version, name, text });
+    S.editing = null;
+    await openProject(id);
+  } else {
+    const p = await api("/lineups", "POST", { name, text, template: S.template });
+    await openProject(p.id);
+  }
+  await prepare();
 }
-async function lookUpActs() {
-  S.step = stepIndex("bill");
-  render();
-  const r = await job(`/projects/${S.project.id}/identify`, { version: S.project.version }, "Looking up each act in Qloo…");
-  await reload();
-  identitiesDialog(r);
+async function prepare() {
+  if (hasEvidence() || !S.config.qloo_configured) return render();
+  S.problem = null;
+  try {
+    if (day().acts.some((a) => !a.qloo_id)) {
+      S.loading = `Finding ${plural(day().acts.length, "act")} in Qloo…`;
+      render();
+      await job(`/projects/${S.project.id}/identify`, { version: S.project.version }, "Finding each act in Qloo…");
+      await reload();
+    }
+    if (confirmed() < 2) {
+      S.loading = null;
+      S.problem = "Qloo found fewer than two of these acts. Check the names.";
+      return render();
+    }
+    S.loading = "Asking Qloo who shares a crowd…";
+    render();
+    await job(`/projects/${S.project.id}/evidence`, { version: S.project.version, source: "live" }, "Asking Qloo who shares a crowd…");
+    S.loading = null;
+    S.drawThreads = true;
+    await reload();
+  } catch (e) {
+    S.loading = null;
+    S.problem = e.message;
+    await reload();
+  }
 }
+const lookUpActs = prepare;
 async function openOrRestore(id) {
   try {
     await openProject(id);
@@ -1267,12 +1552,13 @@ async function openOrRestore(id) {
   }
   const p = await api("/lineups/restore", "POST", saved.day);
   await openProject(p.id);
-  say("This server restarted, so your day came back from the copy in this browser. Read the crowds from Qloo again before running the agent.");
+  await prepare();
   return true;
 }
 async function load() {
   S.config = await api("/config");
   setMode(store.get("counterset-mode") || "walk");
+  setUi(store.get("counterset-ui") === "full" ? "full" : "simple");
   const params = new URLSearchParams(location.search);
   const wanted = params.get("day");
   if (wanted && S.config.examples.some((e) => e.id === wanted)) {
@@ -1281,13 +1567,29 @@ async function load() {
     if (params.has("watch") && hasRecording()) await actions.agent({ dataset: { mode: "replay" } });
     return;
   }
+  if (params.has("template") && !S.templates.length) S.templates = await api("/templates");
+  // A day handed over from the front page goes straight on to being read.
+  if (params.get("project") && params.has("identify")) {
+    if (await openOrRestore(params.get("project"))) await prepare();
+    return;
+  }
   const id = params.get("project");
   if (id) {
     const opened = await openOrRestore(id);
-    if (opened && params.has("identify")) await lookUpActs();
+    if (opened && !hasEvidence() && S.project.context?.kind === "own") await prepare();
     return;
   }
   await showHome(params.has("lineup"));
+}
+function setUi(ui) {
+  S.ui = ui;
+  document.body.dataset.ui = ui;
+  store.set("counterset-ui", ui);
+  $("#ui-toggle").textContent = ui === "simple" ? "All the details" : "Simple view";
+  if (S.project) {
+    S.selected = null;
+    render();
+  }
 }
 function setMode(mode) {
   document.body.dataset.mode = mode;
@@ -1385,7 +1687,8 @@ function resolveDialog(id) {
               await api(`/projects/${S.project.id}/identity`, "POST", { version: S.project.version, act_id: id, qloo_id: b.dataset.confirm, kind: $("#q-kind").value });
               $("#dialog").close();
               await reload();
-              say(`${a.name} confirmed. Evidence was cleared because the bill's identities changed.`);
+              if (simple()) await prepare();
+              else say(`${a.name} confirmed. Evidence was cleared because the bill's identities changed.`);
             })),
       );
     });
@@ -1502,6 +1805,8 @@ const actions = {
     const mode = t.dataset.mode;
     const text = mode === "replay" ? S.project.context.recorded_run.message : $("#agent-message")?.value || sampleMessage();
     S.typed.agent = undefined;
+    S.again = false;
+    say("");
     S.agent = { trace: [], mode, message: text };
     S.agentRunning = true;
     S.proposal = null;
@@ -1521,7 +1826,7 @@ const actions = {
           S.agent.trace = trace;
           const latest = [...trace].reverse().find((x) => x.view?.placements);
           if (latest) S.view = `step${latest.n}`;
-          renderStep();
+          renderWork();
           renderGrid();
           renderInspector();
           const box = $(".trace");
@@ -1534,7 +1839,8 @@ const actions = {
           S.proposal = { ...j.result, proposal_id: j.result.proposal_id };
           S.view = j.result.no_plan ? "draft" : "opt0";
           render();
-          say(j.result.no_plan ? "The agent has finished. It found no plan, and nothing has changed." : "The agent has finished. Nothing has changed: approve it, or inspect any step.");
+          if (!simple()) say(j.result.no_plan ? "The agent has finished. It found no plan, and nothing has changed." : "The agent has finished. Nothing has changed: approve it, or inspect any step.");
+          $("#flow").scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" });
           return;
         }
       }
@@ -1549,7 +1855,39 @@ const actions = {
     S.allCues = !S.allCues;
     S.drawThreads = S.allCues;
     renderGrid();
-    if (S.step === stepIndex("crowds")) renderStep();
+    if (!simple() && S.step === stepIndex("crowds")) renderStep();
+  },
+  retry: () => {
+    S.typed.agent = S.proposal?.message ?? S.agent?.message;
+    S.proposal = null;
+    S.agent = { trace: [], mode: "live", message: S.typed.agent };
+    S.view = "draft";
+    S.selected = null;
+    render();
+  },
+  again: () => {
+    S.again = true;
+    S.typed.agent = "";
+    S.agent = null;
+    S.view = "draft";
+    S.lastStage = null;
+    render();
+  },
+  prepare: () => prepare(),
+  "more-clashes": () => {
+    S.allClashes = true;
+    renderFlow();
+  },
+  template: (t) => useTemplate(t.dataset.id),
+  "path-day": async () => {
+    if (!S.project) return;
+    const was = S.project;
+    const now = await api(`/projects/${was.id}/lineup`);
+    S.template = was.context?.template || null;
+    S.editing = was.context?.kind === "own" ? was.id : null;
+    $("#l-text").value = now.text;
+    $("#l-name").value = now.name;
+    await showHome();
   },
   step: (t) => go(+t.dataset.index),
   undo: async () => {
@@ -1577,7 +1915,7 @@ const actions = {
   act: (t) => select(S.selected?.act === t.dataset.act ? null : { act: t.dataset.act }),
   pair: (t) => {
     select({ pair: [t.dataset.a, t.dataset.b] });
-    $("#inspector").scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" });
+    $(simple() ? "#flow-detail" : "#inspector").scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" });
   },
   view: (t) => {
     S.view = t.dataset.view;
@@ -1653,8 +1991,10 @@ const actions = {
     $("#grid").classList.add("stamp");
     setTimeout(() => $("#grid").classList.remove("stamp"), 800);
     S.step = stepIndex("approve");
+    S.again = false;
     render();
-    say(`Published v${r.number}. Share the timetable and send each act its message.`);
+    if (!simple()) say(`Published v${r.number}. Share the timetable and send each act its message.`);
+    scrollTo({ top: 0, behavior: reduced() ? "auto" : "smooth" });
   },
   export: async (t) => {
     const r = await fetch(`/api/published/${t.dataset.id}/export?format=${t.dataset.format}`, { headers: token() ? { Authorization: `Bearer ${token()}` } : {} });
@@ -1706,11 +2046,26 @@ $("#new-form").onsubmit = (e) => {
   $("#l-go").disabled = true;
   guarded(() => beginLineup($("#l-name").value, $("#l-text").value)).finally(() => ($("#l-go").disabled = false));
 };
+$("#l-text").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("#new-form").requestSubmit();
+});
+$("#l-clear").onclick = () => {
+  S.template = null;
+  S.editing = null;
+  $("#l-text").value = "";
+  $("#l-name").value = "My festival";
+  renderTemplates();
+  $("#l-text").focus();
+};
+$("#ui-toggle").onclick = () => setUi(S.ui === "simple" ? "full" : "simple");
 $("#l-file").onchange = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   $("#l-text").value = await file.text();
-  if ($("#l-name").value === "My festival") $("#l-name").value = file.name.replace(/\.[^.]+$/, "").slice(0, 100);
+  S.template = null;
+  S.editing = null;
+  renderTemplates();
+  $("#l-name").value = file.name.replace(/\.[^.]+$/, "").slice(0, 100);
 };
 $("#edit-json").onclick = () => (closeMenu(), jsonDialog());
 $("#compare").onclick = () => (closeMenu(), guarded(compareDialog));
@@ -1737,7 +2092,11 @@ $("#import").onchange = importDay;
 $("#import-home").onchange = importDay;
 startDrag();
 document.addEventListener("keydown", (e) => {
-  if (!$("#home").hidden || e.target.closest("input, textarea, select, dialog") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (!$("#home").hidden || !S.project || e.target.closest("input, textarea, select, dialog") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (simple()) {
+    if (e.key === "Escape") select(null);
+    return;
+  }
   if (e.key >= "1" && e.key <= "7") go(+e.key - 1);
   else if (e.key === "]") go(S.step + 1);
   else if (e.key === "[") go(S.step - 1);

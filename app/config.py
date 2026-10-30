@@ -65,7 +65,7 @@ class Config:
         self.qloo_per_hour = int(self.values.get("QLOO_CALLS_PER_VISITOR_HOUR", "150"))
         self.qloo_per_day = int(self.values.get("QLOO_CALLS_PER_DAY", "1200"))
         self.agent_solve_seconds = float(self.values.get("AGENT_SOLVE_SECONDS", "10"))
-        self.agent_per_hour = int(self.values.get("AGENT_RUNS_PER_VISITOR_HOUR", "5"))
+        self.agent_per_hour = int(self.values.get("AGENT_RUNS_PER_VISITOR_HOUR", "8"))
         self.agent_per_day = int(self.values.get("AGENT_RUNS_PER_DAY", "40"))
         # Reading a message, a briefing and an LLM baseline spend the model key too.
         self.model_tasks_per_hour = int(self.values.get("MODEL_TASKS_PER_VISITOR_HOUR", "15"))
