@@ -27,7 +27,7 @@ let active;
     active = page;
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    page.on("console", (m) => m.type() === "error" && !/status of 4\d\d/.test(m.text()) && errors.push(m.text()));
+    page.on("console", (m) => m.type() === "error" && !/status of (4\d\d|503)/.test(m.text()) && errors.push(m.text()));
     const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     const sideways = async (name) => check(`${name}: no sideways scroll`, (await overflow()) <= 1, `${await overflow()}px`);
     const headline = () => page.textContent(".headline");
@@ -195,18 +195,138 @@ let active;
     await page.waitForSelector(".template");
     await page.click("#l-go");
     await page.waitForSelector("#agent-message");
-    check("storm: the real day says it plays a saved run", (await page.textContent("#ask-note")).includes("saved run"));
+    check("storm: the real day says it plays a saved run", /saved run/i.test(await page.textContent("#ask-note")));
     await page.focus("#agent-message");
     await page.keyboard.press("Enter");
     await page.waitForFunction(() => document.querySelector("#flow").dataset.stage === "running");
     check("storm: enter starts it", true);
     await page.waitForSelector("#approve", { timeout: RUN });
-    check("storm: labelled as a saved run", (await page.textContent("#flow .eyebrow")).includes("saved run"));
+    check("storm: labelled as a saved run", /saved run/i.test(await page.textContent("#flow .eyebrow")));
     check("storm: more sets play than on the day", /27 of 28|28 sets/.test(await headline()), (await headline()).trim());
     check("storm: it compares with the real day", (await page.textContent(".tally")).includes("on the real day"));
     await page.reload();
     await page.waitForSelector("#approve");
     check("storm: a reload keeps the plan", true);
+
+    // ---------- What a plan shows below the timetable ----------
+    check("plan: a coloured summary shows by default", (await page.locator("#agent-summary").isVisible()) && (await page.textContent("#agent-summary p")).length > 20);
+    await page.click('[data-action="summary-more"]');
+    check("plan: the summary opens to the changes", (await page.locator("#agent-summary li").count()) > 0, await page.textContent("#agent-summary li"));
+    await page.click('[data-action="summary-more"]');
+    check("plan: no rescue numbers reach the programmer", !/rescue \d/i.test(await page.textContent("#agent-summary")));
+    check("plan: the ask box is there", await page.locator("#ask-agent-form").isVisible());
+    check("plan: it compares with and without Qloo", (await page.textContent(".qloo-card")).includes("Without Qloo") && (await page.locator(".qloo-card tr.differs").count()) > 0, (await page.textContent(".qloo-card p")).trim());
+    for (const tab of ["messages", "steps", "changes"]) {
+      await page.click(`[data-action="lower"][data-tab="${tab}"]`);
+      check(`plan: the ${tab} tab opens`, (await page.getAttribute(`[data-action="lower"][data-tab="${tab}"]`, "aria-selected")) === "true" && (await page.textContent(".lower-panel")).trim().length > 10);
+    }
+    check("plan: suggested questions are offered", (await page.locator('.ask-chips [data-action="ask-chip"]').count()) >= 2);
+    // Closed slots hide what cannot play there, and nothing is drawn over a set.
+    const closed = await page.evaluate(() => {
+      const holds = [...document.querySelectorAll(".frame.hold")];
+      const sets = [...document.querySelectorAll(".set")];
+      const over = sets.some((s) => holds.some((h) => {
+        const a = s.getBoundingClientRect();
+        const b = h.getBoundingClientRect();
+        return Math.min(a.right, b.right) - Math.max(a.left, b.left) > 2 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 2 && +getComputedStyle(h).zIndex >= +getComputedStyle(s).zIndex;
+      }));
+      return { holds: holds.length, over };
+    });
+    check("plan: closed bands never cover a set", closed.holds > 0 && !closed.over, JSON.stringify(closed));
+    await sideways("plan");
+
+    // ---------- Approving twice ----------
+    await page.dblclick("#approve");
+    await page.waitForFunction(() => document.querySelector("#flow").dataset.stage === "sent", null, { timeout: 30000 });
+    check("approve: a double press gives one approval and no error", !errors.some((e) => /proposal_id/.test(e)) && !(await page.textContent("#flow")).includes("Cannot read"), (await headline()).trim());
+
+    // ---------- Every untouched example plays its saved run ----------
+    for (const id of TEMPLATES) {
+      await page.goto(`${BASE}/studio?template=${id}`);
+      await page.waitForSelector(".template");
+      await page.click("#l-go");
+      await page.waitForSelector("#agent-message", { timeout: 30000 });
+      check(`${id}: untouched says saved run`, (await page.textContent("#ask-note")).includes("Saved run") && (await page.textContent("#ask-go")).includes("saved run"));
+      await page.selectOption("#lim-short", "75");
+      check(`${id}: an option makes it live`, (await page.textContent("#ask-note")).includes("Live run"));
+      await page.selectOption("#lim-short", "");
+      check(`${id}: undoing the option makes it saved again`, (await page.textContent("#ask-note")).includes("Saved run"));
+      await page.click("#ask-go");
+      await page.waitForSelector("#approve", { timeout: RUN });
+      check(`${id}: says it is a saved run`, /saved run/i.test(await page.textContent("#flow .eyebrow")), (await headline()).trim());
+    }
+
+    // ---------- Cancel ----------
+    await page.click('[data-action="retry"]');
+    await page.focus("#agent-message");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#approve");
+    check("cancel: esc goes back to the plan", (await stage()) === "plan");
+    await page.click('[data-action="retry"]');
+    await page.click('[data-action="cancel-edit"]');
+    await page.waitForSelector("#approve");
+    check("cancel: the button goes back to the plan", (await stage()) === "plan");
+
+    // ---------- Hover keeps text readable ----------
+    if (!phone) {
+      await page.goto(BASE + "/studio?template=lollapalooza-2024-saturday");
+      await page.waitForSelector(".template");
+      const luminance = (rgb) => {
+        const [r, g, b] = rgb.match(/[\d.]+/g).map(Number).map((v) => v / 255).map((v) => (v < 0.04 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const contrast = async (selector) => {
+        await page.hover(selector);
+        await page.waitForTimeout(350);
+        const [fg, bg] = await page.evaluate((s) => {
+          const c = getComputedStyle(document.querySelector(s));
+          return [c.color, c.backgroundColor];
+        }, selector);
+        const [x, y] = [luminance(fg), luminance(bg)];
+        return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+      };
+      const t = await contrast('.template[aria-pressed="true"]');
+      check("hover: the chosen day stays readable", t >= 4.5, t.toFixed(1));
+      await page.click("#l-go");
+      await page.waitForSelector("#agent-message");
+      const pathItem = await contrast('#path button:not(:disabled)');
+      check("hover: a step in the path stays readable", pathItem >= 4.5, pathItem.toFixed(1));
+    }
+
+    // ---------- A live run that fails says so and offers a saved run ----------
+    await page.goto(BASE + "/studio?template=outside-lands-2026-friday");
+    await page.waitForSelector(".template");
+    await page.click("#l-go");
+    await page.waitForSelector("#agent-message");
+    await page.fill("#agent-message", "Twin Peaks is closed 17:00 to 18:00.");
+    await page.route("**/agent", (r) => r.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Gemini did not answer on any of the 3 keys (HTTP 429). Nothing was applied." }) }));
+    await page.click("#ask-go");
+    await page.waitForSelector(".run-failed");
+    await page.unroute("**/agent");
+    check("failure: it names the reason", (await page.textContent(".run-failed")).includes("3 keys"), (await page.textContent(".run-failed h2")).trim());
+    check("failure: what was typed is still there", (await page.inputValue("#agent-message")).includes("Twin Peaks"));
+    await sideways("failure");
+    await page.click(".run-failed .watch-saved");
+    await page.waitForSelector("#approve", { timeout: RUN });
+    check("failure: a saved run plays from there", /saved run/i.test(await page.textContent("#flow .eyebrow")), (await headline()).trim());
+
+    // ---------- Watching the agent on the public page ----------
+    await page.goto(BASE + "/");
+    await page.waitForSelector("#watch-play");
+    await page.waitForFunction(() => getComputedStyle(document.querySelector(".loader")).visibility === "hidden");
+    let live = 0;
+    const counted = (r) => /\/agent|\/ask|\/models/.test(r.url()) && !/agent-replay/.test(r.url()) && live++;
+    page.on("request", counted);
+    await page.evaluate(() => document.querySelector("#watch").scrollIntoView({ behavior: "instant" }));
+    check("watch: says what recorded it", /3\.8 Flash/.test(await page.textContent("#watch-tag")), (await page.textContent("#watch-tag")).trim());
+    await page.click("#watch-play");
+    await page.waitForFunction(() => document.querySelector("#watch-line").textContent.length > 3, null, { timeout: 15000 });
+    check("watch: the agent's steps play", true, (await page.textContent("#watch-line")).trim().slice(0, 80));
+    await page.waitForTimeout(1500);
+    page.off("request", counted);
+    check("watch: it makes no live calls", live === 0, `${live} calls`);
+    await sideways("watch");
+    await page.click("#watch-back");
 
     if (LIVE) {
       // ---------- A live run, by Enter alone ----------
@@ -225,6 +345,24 @@ let active;
       check("live: labelled live", (await page.textContent("#flow .eyebrow")).includes("live"));
       check("live: no clash left on the plan", (await page.locator(".set.clash").count()) === 0 && (await page.textContent(".tally")).includes("→ 0"), (await page.textContent(".tally")).replace(/\s+/g, " "));
       check("live: says what Qloo changed", (await page.textContent(".flow-say")).includes("Without Qloo"), (await page.textContent(".flow-say")).trim());
+      // ---------- Asking the agent ----------
+      await page.click('.ask-chips [data-action="ask-chip"]');
+      await page.waitForSelector(".chat-a", { timeout: RUN });
+      check("ask: it answers from the plan", (await page.textContent(".chat-a")).length > 10, (await page.textContent(".chat-a")).slice(0, 120));
+      await page.fill("#ask-agent-text", "Keep Djo in their original slot");
+      await page.click('#ask-agent-form button');
+      await page.waitForFunction(() => document.querySelectorAll(".chat-a").length >= 2 || document.querySelector(".ask-agent .status.error"), null, { timeout: RUN });
+      check("ask: a request can change the plan", (await page.locator(".chat-new").count()) >= 1, (await page.textContent(".chat li:last-child")).slice(0, 160));
+      check("ask: the last plan stays reachable", (await page.locator('[data-action="plan-back"]').count()) >= 1);
+      // ---------- Asking the agent ----------
+      await page.click('.ask-chips [data-action="ask-chip"]');
+      await page.waitForSelector(".chat-a", { timeout: RUN });
+      check("ask: it answers from the plan", (await page.textContent(".chat-a")).length > 10, (await page.textContent(".chat-a")).slice(0, 120));
+      await page.fill("#ask-agent-text", "Keep Djo in their original slot");
+      await page.click('#ask-agent-form button');
+      await page.waitForFunction(() => document.querySelectorAll(".chat-a").length >= 2 || document.querySelector(".ask-agent .run-failed"), null, { timeout: RUN });
+      check("ask: a request can change the plan", (await page.locator(".chat-new").count()) >= 1, (await page.textContent(".chat li:last-child")).slice(0, 160));
+      check("ask: the last plan stays reachable", (await page.locator('[data-action="plan-back"]').count()) >= 1);
       await page.click('#views [data-view="blind0"]');
       await page.waitForTimeout(800);
       check("live: without Qloo shows the clashes", (await page.locator(".set.clash").count()) >= 2);

@@ -68,7 +68,9 @@ Controller rules: a quote must be an exact part of the message; a curfew may not
 
 A finished run is a proposal carrying its own day (the closures and rescue terms) and the hash of the day it started from. Publishing re-checks the hash and re-runs the validator. Models cannot call Qloo, produce placements, approve or publish.
 
-**Replay.** `record_agent.py` stores only the model's decisions. The saved run on the Bonnaroo day replays them and runs every tool again, so solver and validator results are live; it needs no model and refuses a changed day or message.
+**Saved runs.** `record_agent.py` runs the agent live once on an example with `gemini-3.8-flash`, checks the plan with the validator and stores the whole run: every step, the plan and the Qloo comparison. An untouched example plays it back with no model, solver or Qloo call, and the page says so. Changing the words, an option or the lineup makes the run live. The landing page plays the Bonnaroo run the same way.
+
+**Questions.** `ask_agent.py` is a second bounded loop over an existing plan: it can look up why a set moved, ask Qloo for the crowd two acts share or for similar acts, and re-solve with new rules. A new plan is a new proposal that a person still approves, and the last plan stays reachable. Numbers in its answers are checked against tool results.
 
 The older message reader in `agent.py` is still the “Something changes” step: it proposes typed items, each with an exact quote, for a person to tick.
 
@@ -86,7 +88,7 @@ SQLite stores projects, proposals, notes, published versions, benchmarks and job
 
 ## Providers
 
-Requests are allowlisted (`/search`, `/v2/insights`, `/v2/analysis/compare`; two Gemini models). Qloo calls are spaced at least 13 seconds apart under a file lock, counted against a durable ledger with the prior-use offset, and cached privately by request digest. Model attempts are capped. 429/500/502/503 responses retry with backoff; a 400 drops the JSON MIME hint once; incomplete responses report their finish reason. A failed job applies nothing.
+Requests are allowlisted (`/search`, `/v2/insights`, `/v2/analysis/compare`; one Gemini model and up to three free keys, in turn). Qloo calls are spaced at least 13 seconds apart under a file lock, counted against a durable ledger with the prior-use offset, and cached privately by request digest. Model attempts are capped. 429/500/502/503 responses retry with backoff; a 400 drops the JSON MIME hint once; incomplete responses report their finish reason. A failed job applies nothing.
 
 ## Interface
 

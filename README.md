@@ -10,7 +10,7 @@ Replaying that Sunday on the real timetable, with a midnight finish and sets all
 | Counterset, same closure, full-length sets only | 24 of 28 | 4 | 0 |
 | **Counterset, sets may shrink to 75%** | **27 of 28** | **1** | **0** |
 | Counterset, sets may shrink to 50% | 28 of 28 | 0 | 0 |
-| The same 75% rescue with Qloo removed, in the recorded run | 27 of 28 | 1, a far bigger draw | 1 |
+| The same 75% rescue with Qloo removed, in the recorded run | 27 of 28 | 1, a far bigger draw | 2 |
 
 This shows what was open, not what the festival should have done. It assumes every act was still on site and willing to play a shorter set, and the people there knew things this cannot, such as crew hours, mud and flights. The full list of assumptions is below and in the app.
 
@@ -40,10 +40,10 @@ Stage sizes and artist hours (about two hours either side of the published set) 
 ### How the API keys are protected
 
 - The Qloo and Gemini keys are secret settings on the host. They are not in the code, the browser, the logs or any response. Calls send them in headers, so they never appear in a URL.
-- The browser only ever talks to this server, and the server only calls an allowlist of Qloo paths and two named Gemini models.
+- The browser only ever talks to this server, and the server only calls an allowlist of Qloo paths and one named Gemini model.
 - Every route that spends a key has an hourly limit per visitor and a daily limit across all visitors. A visitor is identified by the address Cloudflare reports, because `X-Forwarded-For` can be forged.
 - Worked examples carry their recorded rows, so they do not read Qloo again. Other websites cannot make a visitor's browser call the API, because writes need a custom header and a matching origin.
-- The Gemini key is a free-tier key, so it cannot run up a bill, and Google may use what it receives to improve its products. The interface says not to paste anything confidential.
+- The Gemini keys are free-tier keys, so they cannot run up a bill. Up to three take turns, and a key that is limited or refused sits out while the next one answers. If all of them fail, the page says so and offers a saved run to watch. Google may use what it receives to improve its products. The interface says not to paste anything confidential.
 - If a limit is reached, the visitor is told and the solver and audit keep working.
 
 This free server is small: a tenth of a CPU core, and it restarts after 15 idle minutes. A restart clears the server's disk, including approved versions and its running totals of calls. Your browser keeps a copy of your own lineup and brings it back, and a shared timetable link holds its own data, so it keeps working. For lasting use, run it on your own server.
@@ -52,7 +52,7 @@ This free server is small: a tenth of a CPU core, and it restarts after 15 idle 
 
 | Criterion | Where to look |
 | --- | --- |
-| **Technological implementation** | A tool-calling agent over a constraint solver (OR-Tools CP-SAT), with a separate pure-Python validator that recounts every rule and objective. 75 tests, including brute-force checks of the solver. Qloo is used through three endpoints: see [Exactly how Qloo is used](#exactly-how-qloo-is-used). |
+| **Technological implementation** | A tool-calling agent over a constraint solver (OR-Tools CP-SAT), with a separate pure-Python validator that recounts every rule and objective. 88 tests, including brute-force checks of the solver. Qloo is used through three endpoints: see [Exactly how Qloo is used](#exactly-how-qloo-is-used). |
 | **Design** | One path of three steps, from a real day or a pasted lineup to an approved version and a shared timetable. One look across the site, with a single top bar and logo. The timetable moves as the agent works. Plain language throughout, with the technical detail one click away. Works at phone width and with reduced motion. |
 | **Potential impact** | A specific person (the festival programmer) and a recurring problem: [seven festivals were hit by weather in 2026 that we found in the press](#why-this-problem). A real day, real timetable and real cancellations, with the limits stated. |
 | **Quality of the idea** | Taste data used to schedule, not to recommend. Qloo decides which sets must not play at once and which set to lose first, across music, comedy and podcasts. Every result can be compared with the same solver without Qloo, and the app says when Qloo changed nothing. |
@@ -98,7 +98,7 @@ Every Qloo call is server-side, spaced, counted, capped per visitor and cached. 
 | `GET /v2/insights` | `filter.type`, `signal.interests.entities` (one act), `filter.results.entities` (exactly the bill), `take` | One response per act and kind of act ranks the rest of the bill. Two acts that each rank the other in their top *k* share a crowd. Ranks are read inside one response and never compared across responses. One reversed-order request is a stability check. |
 | `GET /v2/analysis/compare` | `a.signal.interests.entities`, `b.signal.interests.entities`, `take` | The taste tags two crowds share, so a person can see why a pair counts and overrule it. |
 
-**Remove Qloo and the behaviour changes.** Shared-crowd pairs disappear, so the solver no longer keeps those acts apart, and popularity disappears, so a dropped set is whichever its search reaches. Every option in the app is solved a second time this way, so a judge can see the difference. In the recorded run, the rescue without Qloo has 1 more clash and drops Japanese Breakfast (Qloo popularity 99%) in place of Little Stranger (48%).
+**Remove Qloo and the behaviour changes.** Shared-crowd pairs disappear, so the solver no longer keeps those acts apart, and popularity disappears, so a dropped set is whichever its search reaches. Every option in the app is solved a second time this way, so a judge can see the difference. In the recorded run, the rescue without Qloo has 2 more clashes and drops Spacey Jane (Qloo popularity 91%) in place of Little Stranger (48%).
 
 ## What is measured and what is not
 
@@ -156,7 +156,7 @@ Qloo's raw responses are not published, so a fresh clone has no worked days. Reb
 ```
 
 ```bash
-.venv/bin/python scripts/record_agent.py
+.venv/bin/python scripts/record_agent.py bonnaroo-2026-sunday gemini-3.8-flash --paid
 ```
 
 `build_bonnaroo.py` needs `.private/bonnaroo/search.json`, written by the identity search it documents, and uses about 60 Qloo calls. `build_lolla.py`, `build_pitchfork.py` and `build_rehearsal.py` build the other days. Without any of these, the studio still works: open the blank rehearsal day, confirm identities and query your own bill.
@@ -165,7 +165,7 @@ To host it, see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ### Models
 
-`gemini-3.5-flash-lite` runs the agent and `gemma-4-31b-it` is selectable for reading messages, both through the Gemini API with high thinking. There is no silent model switch. Everything except the live agent, message reading and briefings works without a model.
+`gemini-3.5-flash-lite` runs every live call through the Gemini API, always with thinking on (`MODEL_THINKING`, high by default or medium). It takes up to three free keys in turn. An untouched example plays a saved run instead, made once by `gemini-3.8-flash` with real model, solver and Qloo calls, so it costs nothing and takes seconds. Change the words, an option or the lineup and the run is live. The page says which one you are getting. There is no silent model switch. Everything except the live agent, message reading and briefings works without a model.
 
 ## Use it from another agent
 

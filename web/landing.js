@@ -7,7 +7,7 @@ const plural = (n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
 
 // ---------- The live replay ----------
 const live = $("#live");
-const state = { curfew: 1440, shortest: 75, real: false };
+const state = { curfew: 1440, shortest: 75, real: false, film: null };
 let table = null;
 const ROW = 54;
 const AXIS = 24;
@@ -52,7 +52,7 @@ function draw() {
   const g = geometry();
   const board = $("#board");
   const row = current();
-  const places = state.real ? table.as_run.placements : row.placements;
+  const places = state.film || (state.real ? table.as_run.placements : row.placements);
   const acts = Object.fromEntries(table.acts.map((a) => [a.id, a]));
   const stageIndex = Object.fromEntries(table.stages.map((s, i) => [s.id, i]));
   const cancelled = new Set(table.as_run.placements.filter((p) => p.cut).map((p) => p.act_id));
@@ -79,6 +79,7 @@ function draw() {
     el.classList.toggle("tiny", !p.cut && length * g.ppm < 66);
     el.title = p.cut ? `${a.name}: not playing` : `${a.name}, ${tm(p.start)}–${tm(p.start + length)}${length !== a.duration ? `, ${length} of ${a.duration} minutes` : ""}`;
   }
+  if (state.film) return;
   const big = $(".big");
   big.classList.toggle("real", state.real);
   if (state.real) {
@@ -155,6 +156,88 @@ async function startLive() {
   }
 }
 
+// ---------- Watching the saved run ----------
+// Steps from one real run of the agent. Playing them calls no model and no solver.
+const STEP_WORDS = {
+  close_site: "Closed the site",
+  close_stage: "Closed a stage",
+  limit_act: "Set a limit on an act",
+  audit: "Checked the day",
+  try_rescue: "Tried a rescue",
+  compare_without_qloo: "Solved it again without Qloo",
+  compare_as_run: "Scored what really happened",
+  why_they_share_a_crowd: "Asked why two acts share a crowd",
+  finish: "Handed over a plan",
+  report_conflict: "Reported that nothing fits",
+};
+const MODEL_WORDS = { "gemini-3.8-flash": "Gemini 3.8 Flash", "gemini-3.5-flash-lite": "Gemini 3.5 Flash Lite" };
+let film = null;
+function filmStep() {
+  const step = film.run.steps[film.at];
+  if (step.placements) state.film = step.placements;
+  draw();
+  $("#watch-count").textContent = `Step ${film.at + 1} of ${film.run.steps.length}: ${STEP_WORDS[step.tool] || "Tried a step"}`;
+  $("#watch-thought").textContent = step.thought;
+  $("#watch-line").textContent = step.line;
+}
+function filmEnd() {
+  film.playing = false;
+  state.film = film.run.final;
+  draw();
+  $("#watch-count").textContent = "The agent's plan. A person still has to approve it.";
+  $("#watch-thought").textContent = film.run.summary;
+  $("#watch-line").textContent = "";
+  $("#watch-play").textContent = "Play it again";
+}
+function filmTick() {
+  clearTimeout(film.timer);
+  if (!film.playing) return;
+  film.at += 1;
+  if (film.at >= film.run.steps.length) return filmEnd();
+  filmStep();
+  film.timer = setTimeout(filmTick, 2200);
+}
+function filmLeave() {
+  clearTimeout(film.timer);
+  film.playing = false;
+  film.at = -1;
+  state.film = null;
+  $("#live").classList.remove("filming");
+  $("#watch-run").hidden = true;
+  $("#watch-back").hidden = true;
+  $("#watch-play").textContent = "Watch the agent work";
+  draw();
+}
+async function startWatch() {
+  try {
+    const r = await fetch("/api/agent-replay");
+    if (!r.ok) return;
+    const run = await r.json();
+    film = { run, at: -1, playing: false, timer: 0 };
+    const when = new Date(run.at * 1000).toLocaleDateString([], { day: "numeric", month: "long" });
+    $("#watch-tag").textContent = `A saved run of ${MODEL_WORDS[run.model] || run.model}, recorded ${when}. Playing it calls no model.`;
+    $("#watch-message").textContent = run.message;
+    $("#watch").hidden = false;
+    $("#watch-back").onclick = filmLeave;
+    $("#watch-play").onclick = () => {
+      if (!table) return;
+      if (film.playing) {
+        film.playing = false;
+        clearTimeout(film.timer);
+        $("#watch-play").textContent = "Keep playing";
+        return;
+      }
+      if (film.at >= film.run.steps.length) film.at = -1;
+      film.playing = true;
+      $("#live").classList.add("filming");
+      $("#watch-run").hidden = false;
+      $("#watch-back").hidden = false;
+      $("#watch-play").textContent = "Pause";
+      filmTick();
+    };
+  } catch {}
+}
+
 // ---------- Motion ----------
 function startMotion() {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -196,3 +279,4 @@ async function startDays() {
 startMotion();
 startDays();
 startLive();
+startWatch();

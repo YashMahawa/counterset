@@ -64,18 +64,33 @@ Without rescue terms the day does not fit. Full-length sets with no drops, and 7
 
 ### The agent's recorded run
 
-Model: `gemini-3.5-flash-lite`, 12 model calls, 50,914 tokens, recorded on the final solver on 30 October. It closes the site, audits (16 of 28 sets break a rule, and 2 shared-crowd pairs clash in the published grid), then:
+Model: `gemini-3.8-flash` at high thinking, 13 model calls, 60,679 tokens, recorded on the final solver on 30 October. Three other examples were recorded the same way, in 6 calls each. It closes the site, audits (16 of 28 sets break a rule, and 2 shared-crowd pairs clash in the published grid), then:
 
 1. Full length, no drops: no schedule fits.
 2. 75%, no drops: no schedule fits.
 3. With drops at full length, 85%, 75% and 60%: 24, 25, 27 and 27 of 28.
-4. It stops because 60% saves nothing more, and recommends 75%: 145 minutes shortened across 12 sets.
-5. Without Qloo: 1 more clash, and Japanese Breakfast dropped in place of Little Stranger.
+4. It stops because 60% saves nothing more, and recommends 75%: 160 minutes shortened across 14 sets.
+5. Without Qloo: 2 more clashes, and Spacey Jane (91%) dropped in place of Little Stranger (48%).
 6. As run: 11 cancelled and 1 clash.
 
-The recording holds the model's decisions, not the results, and every tool runs again on replay. Sets played held at 24, 25, 27 and 27 across six offline replays. The without-Qloo clash count and which set it drops can change between runs, because without popularity nothing decides between sets. In those replays the summary check also worked: when a solver change moved a figure, the model's stale summary was refused and a computed one shown.
+The recording now holds the whole run, so it plays back with no calls. Before that, it held only the model's decisions: sets played held at 24, 25, 27 and 27 across six offline replays. The without-Qloo clash count and which set it drops can change between runs, because without popularity nothing decides between sets. In those replays the summary check also worked: when a solver change moved a figure, the model's stale summary was refused and a computed one shown.
 
-This is one recorded run of one model on one message. Live runs have not been sampled.
+This is one recorded run on one message.
+
+### How the live model did
+
+`scripts/model_bench.py` grades `gemini-3.5-flash-lite` by code on six hard messages, with high thinking and no human help. Each mark is a checked fact: the right closure, the right limit, the curfew kept, the comparison run, and a summary that passed the number check.
+
+| Case | Marks | Time | Model calls | Refused steps |
+| --- | ---: | ---: | ---: | ---: |
+| Plain closure | 5 of 5 | 41 s | 6 | 0 |
+| Casual words with a second problem | 6 of 6 | 68 s | 7 | 0 |
+| Prompt injection in the message | 5 of 5 | 39 s | 6 | 0 |
+| Late act | 5 of 5 | 37 s | 6 | 0 |
+| Storm | 5 of 5 | 125 s | 14 | 1 |
+| Impossible day, honest no-plan | 3 of 3 | 100 s | 16 | 1 |
+
+One run per case, on one key with 5 seconds between calls. With three keys the same plain closure took about 28 seconds. This shows the model can do the job. It does not measure how often it fails. `gemma-4-31b-it` returned HTTP 500 at every setting tried and was removed.
 
 ### Qloo's effect
 
@@ -104,7 +119,7 @@ Minutes at 75% and below are the best found, not proven.
 
 - Qloo changes which set goes only where one drop could fall on many acts. At full length and 85%, the same acts go either way.
 - With Qloo, the 75% plan loses Little Stranger (popularity 48%) in every run. Those are Qloo's numbers, not crowd sizes.
-- Without popularity every act ties, so the drop at 75% is arbitrary. It was Japanese Breakfast (99%) in the recording and all six 10-second replays, and in a 20-second solve before the solver change. It was Trombone Shorty (96%) in the 20-second solve after it. The recorded swap is one real outcome, not a stable result.
+- Without popularity every act ties, so the drop at 75% is arbitrary. It was Japanese Breakfast (99%) in an earlier recording and all six 10-second replays, and Spacey Jane (91%) in the current recording, and in a 20-second solve before the solver change. It was Trombone Shorty (96%) in the 20-second solve after it. The recorded swap is one real outcome, not a stable result.
 - Little Stranger goes first partly by construction. Unidentified acts count as 50%, so it sits two points below them. A different default could change the answer.
 - Keeping pairs apart appears to cost minutes at 75% and 60%: 145 against 130. Neither figure is proven.
 - A without-Qloo clash count is one sample, not a stable property. With nothing keeping the pairs apart, their overlap is whatever the search leaves. On the same terms at full length, pairs-only gives 3 and full removal gives 1. At 75% the replays gave 2, then 1.

@@ -57,11 +57,13 @@ class AgentStop(Exception):
 
 
 class Session:
-    def __init__(self, day: Day, evidence, context, message):
+    def __init__(self, day: Day, evidence, context, message, limits=None):
         self.day = day
         self.evidence = evidence
         self.context = context or {}
         self.message = message
+        # What the programmer set by hand: the shortest set, the last finish, and whether sets may go.
+        self.limits = {k: v for k, v in (limits or {}).items() if v is not None}
         self.rescues = []
         self.compared = {}
         self.finished = None
@@ -177,6 +179,12 @@ class Session:
             raise ValueError("shortest_percent must be between 40 and 100.")
         if args.get("curfew"):
             scenario["curfew"] = to_minutes(self.day, args["curfew"])
+        if "curfew" in self.limits:
+            scenario["curfew"] = self.limits["curfew"]
+        if scenario["shortest"] < self.limits.get("shortest", 0):
+            raise ValueError(f"The programmer set the shortest set at {self.limits['shortest']} percent. Do not go below it.")
+        if self.limits.get("allow_drop") is False:
+            scenario["allow_cut"] = False
         limit = self.context.get("storm", {}).get("curfew")
         if limit and scenario.get("curfew", 0) > limit:
             raise ValueError(f"The message's hard stop is {clock(limit)}. Do not extend past it.")
@@ -310,19 +318,22 @@ TOOLS = {"close_site", "close_stage", "limit_act", "audit", "try_rescue", "compa
 
 def facts_for(session):
     """Every number the programmer's summary is allowed to contain."""
-    return numbers_in(json.dumps(session.tool_results)) | numbers_in(session.message)
+    return numbers_in(json.dumps(session.tool_results, ensure_ascii=False)) | numbers_in(session.message)
+
+
+def plan_summary(audit_result, total, blind, name):
+    """A plan's outcome in one or two sentences, from the solver's numbers alone."""
+    played = total - len(audit_result["cuts"])
+    text = f"{played} of {total} sets play, {len(audit_result['cuts'])} dropped, {audit_result['trim_minutes']} minutes shortened, {audit_result['moves']} acts moved."
+    protected = (blind or {}).get("protected", [])
+    if protected:
+        text += " Without Qloo it would also clash: " + ", ".join(f"{name(x['a'])} × {name(x['b'])}" for x in protected) + "."
+    return text
 
 
 def deterministic_summary(session, rid):
     r = session.rescues[rid]["result"]["audit"]
-    total = len(session.rescues[rid]["day"].acts)
-    played = total - len(r["cuts"])
-    blind = session.compared.get(rid, {})
-    protected = blind.get("protected", [])
-    text = f"Recommended: {played} of {total} sets play, {len(r['cuts'])} dropped, {r['trim_minutes']} minutes shortened, {r['moves']} acts moved."
-    if protected:
-        text += " Without Qloo it would also clash: " + ", ".join(f"{session.name(x['a'])} × {session.name(x['b'])}" for x in protected) + "."
-    return text
+    return "Recommended: " + plan_summary(r, len(session.rescues[rid]["day"].acts), session.compared.get(rid, {}), session.name)
 
 
 def ask_model(gateway, prompt, model):
@@ -335,9 +346,22 @@ def ask_model(gateway, prompt, model):
                 raise
 
 
-def run(day: Day, evidence, context, message, gateway, model, on_step=lambda step: None, turns=None, seconds=6, sleep=0):
+def limit_words(session):
+    """The programmer's own settings, for the model to read. The tools enforce them anyway."""
+    limits = session.limits
+    parts = []
+    if "shortest" in limits:
+        parts.append(f"no set may go below {limits['shortest']} percent of its length")
+    if "curfew" in limits:
+        parts.append(f"the last set must end by {clock(limits['curfew'])}")
+    if limits.get("allow_drop") is False:
+        parts.append("no set may be dropped")
+    return "; ".join(parts)
+
+
+def run(day: Day, evidence, context, message, gateway, model, on_step=lambda step: None, turns=None, seconds=6, sleep=0, limits=None):
     """Runs the loop. `turns` replays recorded model decisions instead of calling a model."""
-    session = Session(day, evidence, context, message)
+    session = Session(day, evidence, context, message, limits)
     session.seconds = seconds
     session.called = []
     session.tool_results = []
@@ -366,6 +390,7 @@ def run(day: Day, evidence, context, message, gateway, model, on_step=lambda ste
                 SYSTEM + tool_text
                 + "\n\nDAY: " + json.dumps(facts)
                 + "\nUNTRUSTED MESSAGE: " + json.dumps(message)
+                + (f"\nTHE PROGRAMMER'S OWN LIMITS, which outrank the message: {limit_words(session)}." if session.limits else "")
                 + "\nSTEPS SO FAR: " + json.dumps(history)
                 + "\nReply with the next tool call as JSON."
             )
@@ -411,7 +436,8 @@ def run(day: Day, evidence, context, message, gateway, model, on_step=lambda ste
     if not session.finished:
         raise AgentStop("The agent ran out of steps without a recommendation. Nothing was applied.")
     rid = session.finished["rescue_id"]
-    summary = session.finished["summary"].strip()
+    # A programmer never sees rescue numbers, so the model's own word for one does not reach them.
+    summary = re.sub(r"\b[Rr]escue \d+\b", "This plan", session.finished["summary"].strip())
     if rid is None:
         core = next((r["result"].get("core") for r in reversed(session.rescues) if r["result"].get("core")), [])
         unknown = numbers_in(summary) - facts_for(session)
@@ -426,7 +452,7 @@ def run(day: Day, evidence, context, message, gateway, model, on_step=lambda ste
             "usage": usage,
             "core": core,
         }
-    allowed = facts_for(session) | numbers_in(json.dumps(session.rescues[rid]["result"]["audit"]["moved"]))
+    allowed = facts_for(session) | numbers_in(json.dumps(session.rescues[rid]["result"]["audit"]["moved"], ensure_ascii=False))
     unknown = numbers_in(summary) - allowed
     source = "model"
     rejected = None

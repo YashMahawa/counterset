@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field
 from .agent import brief, llm_baseline, propose_changes
-from . import desk_agent
+from . import ask_agent, desk_agent
 from .config import Config
 from .domain import Day, Placement, Priority, Strict, Kind, QLOO_TYPES, digest, reference_hash
 from .evidence import age_days, all_edges, attendee_edges, entities, explain_pairs, fetch_snapshot, genre_edges, identity_key
@@ -45,9 +45,21 @@ class Repair(Versioned):
     scenario: Terms | None = None
 
 
+class Limits(Strict):
+    curfew: int | None = Field(default=None, ge=0, le=2880)
+    shortest: int | None = Field(default=None, ge=40, le=100)
+    allow_drop: bool | None = None
+
+
 class AgentRun(Versioned):
     text: str = Field(min_length=1, max_length=4000)
     mode: str = "replay"
+    model: str = "gemini-3.5-flash-lite"
+    limits: Limits | None = None
+
+
+class Ask(Strict):
+    text: str = Field(min_length=1, max_length=1000)
     model: str = "gemini-3.5-flash-lite"
 
 
@@ -72,7 +84,7 @@ class Publish(Versioned):
 
 class Message(Versioned):
     text: str = Field(min_length=1, max_length=6000)
-    model: str = "gemma-4-31b-it"
+    model: str = "gemini-3.5-flash-lite"
 
 
 class Decision(Strict):
@@ -263,7 +275,7 @@ def create_app(config=None):
             "public": cfg.public,
             "saved_replay": cfg.saved_replay,
             "qloo_configured": bool(cfg.qloo_key),
-            "model_configured": bool(cfg.model_key),
+            "model_configured": bool(cfg.model_keys),
             "models": cfg.models,
             "budget": gateway.budget(),
             "examples": examples.list(),
@@ -561,10 +573,10 @@ def create_app(config=None):
         if req.mode == "replay":
             if not recorded:
                 raise HTTPException(422, "This day has no recorded run. Run the agent live.")
-            if p["version"] != 1 or req.text != recorded["message"]:
+            if p["version"] != 1 or req.text != recorded["message"] or (req.limits and any(v is not None for v in req.limits.model_dump().values())):
                 raise HTTPException(409, "The recorded run only fits the untouched day and its original message. Run the agent live instead.")
         elif req.mode == "live":
-            if not cfg.model_key:
+            if not cfg.model_keys:
                 raise HTTPException(422, "No model is configured. Watch the recorded run instead.")
             if req.model not in cfg.models:
                 raise HTTPException(422, "Choose a configured model")
@@ -590,7 +602,7 @@ def create_app(config=None):
             try:
                 for item in saved["trace"]:
                     step(item)
-                    time.sleep(1.2)
+                    time.sleep(0.9)
                 sandbox = Day.model_validate(saved["proposal"]["day"])
                 option = saved["proposal"]["options"][0]
                 places = [Placement.model_validate(x) for x in option["placements"]]
@@ -623,6 +635,7 @@ def create_app(config=None):
                 outcome = desk_agent.run(
                     day, p["evidence"], context, req.text, gateway, req.model, step,
                     turns=recorded["decisions"] if req.mode == "replay" else None, seconds=cfg.agent_solve_seconds,
+                    limits=req.limits.model_dump() if req.limits else None,
                 )
                 proposal = desk_agent.to_proposal(outcome, day)
                 proposal.update(
@@ -652,7 +665,72 @@ def create_app(config=None):
                 message = str(e) if known else "The agent stopped; nothing was applied"
                 store.put("job", {"status": "FAILED", "label": "Rescue agent", "error": message, "trace": trace, "mode": req.mode}, jid)
 
-        pool.submit(run_saved if req.mode == "replay" and cfg.saved_replay and recorded.get("saved") else run)
+        # A saved run calls no model and no solver: it costs nothing and shows the real steps.
+        pool.submit(run_saved if req.mode == "replay" and recorded.get("saved") else run)
+        return {"job_id": jid}
+
+    @app.get("/api/agent-replay")
+    def agent_replay():
+        """The saved Bonnaroo run for the public page's player. No model is called."""
+        recorded = examples.get("bonnaroo-2026-sunday")["context"].get("recorded_run") or {}
+        saved = recorded.get("saved")
+        if not saved:
+            raise HTTPException(404, "No saved run is installed here")
+        return {
+            "model": recorded["model"],
+            "thinking": recorded.get("thinking"),
+            "at": recorded["at"],
+            "message": recorded["message"],
+            "summary": saved["proposal"]["summary"],
+            "final": saved["proposal"]["options"][0]["placements"],
+            "steps": [{"n": t["n"], "tool": t["tool"], "thought": t["thought"], "line": t["line"], "ok": t["ok"], "placements": t["view"].get("placements")} for t in saved["trace"]],
+        }
+
+    @app.post("/api/proposals/{pid}/ask")
+    def ask(pid, req: Ask, request: Request):
+        """A question about a plan, or a request to change it. Any new plan still waits for approval."""
+        proposal = store.get("proposal", pid)
+        p, day = current(proposal["project"])
+        if proposal["input_version"] != p["version"]:
+            raise HTTPException(409, "This plan is out of date. Reload the day.")
+        if proposal.get("no_plan") or not proposal.get("agent"):
+            raise HTTPException(422, "There is no plan from the agent to ask about")
+        if not cfg.model_keys:
+            raise HTTPException(422, "No model is set up on this server")
+        if req.model not in cfg.models:
+            raise HTTPException(422, "Choose a configured model")
+        spend("ask", request, 1, cfg.ask_per_hour, cfg.ask_per_day, "You have reached this server's hourly limit for questions to the agent. Try again later.")
+        jid = store.put("job", {"status": "RUNNING", "label": "Asking the agent", "progress": 0, "trace": [], "created": time.time()})
+        trace = []
+
+        def step(item):
+            trace.append({k: v for k, v in item.items() if k != "view"})
+            store.put("job", {"status": "RUNNING", "label": "Asking the agent", "progress": min(0.95, len(trace) / 8), "detail": item["line"], "trace": trace}, jid)
+
+        def qloo_cap():
+            try:
+                qloo_allowed(request, 1)
+            except HTTPException as e:
+                raise ValueError(e.detail) from None
+
+        def run():
+            try:
+                out = ask_agent.run(proposal, p["evidence"], req.text, gateway, req.model, step, seconds=cfg.agent_solve_seconds, qloo_cap=qloo_cap)
+                chat = [*proposal.get("chat", []), {"q": req.text, "a": out["answer"], "changed": bool(out.get("plan")), "steps": [t["line"] for t in trace], "model": req.model}]
+                if out.get("plan"):
+                    new = {**proposal, **out["plan"], "chat": chat, "parent": pid, "changed_by_ask": True, "created": time.time(), "model": req.model, "message": proposal.get("message")}
+                    new.pop("id", None)
+                    new_id = store.put("proposal", new)
+                    result = {"answer": out["answer"], "proposal_id": new_id}
+                else:
+                    store.put("proposal", {**{k: v for k, v in proposal.items() if k != "id"}, "chat": chat}, pid)
+                    result = {"answer": out["answer"], "chat": chat}
+                store.put("job", {"status": "COMPLETED", "label": "Asking the agent", "progress": 1, "trace": trace, "result": result}, jid)
+            except Exception as e:
+                known = isinstance(e, (ProviderError, ValueError, desk_agent.AgentStop))
+                store.put("job", {"status": "FAILED", "label": "Asking the agent", "error": str(e) if known else "The agent stopped. Nothing changed.", "trace": trace}, jid)
+
+        pool.submit(run)
         return {"job_id": jid}
 
     @app.get("/api/rescue-table")
@@ -669,7 +747,7 @@ def create_app(config=None):
         p, day = current(proposal["project"])
         if proposal["input_version"] != p["version"]:
             raise HTTPException(409, "This proposal is stale")
-        if not cfg.model_key:
+        if not cfg.model_keys:
             raise HTTPException(422, "No model is configured; the computed options are complete without a briefing")
         model_task_allowed(request, req.model)
 
@@ -701,7 +779,7 @@ def create_app(config=None):
     @app.post("/api/projects/{id}/messages")
     def message(id, req: Message, request: Request):
         p, day = current(id, req.version)
-        if not cfg.model_key:
+        if not cfg.model_keys:
             raise HTTPException(422, "No model is configured. Add the constraint with Stage hold or Edit act.")
         model_task_allowed(request, req.model)
 

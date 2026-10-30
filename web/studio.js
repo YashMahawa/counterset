@@ -54,6 +54,18 @@ const S = {
   loading: null,
   problem: null,
   again: false,
+  retrying: false,
+  publishing: false,
+  // What the person set in the try box. Left alone, a template day plays its saved run.
+  limits: { shortest: "", curfew: "", drop: true },
+  // Below the timetable: which list shows, and the conversation with the agent.
+  lower: "changes",
+  allChanges: false,
+  fullSummary: false,
+  asking: false,
+  askLine: "",
+  askError: "",
+  seenHolds: new Set(),
   templates: [],
   template: null,
   editing: null,
@@ -521,7 +533,7 @@ const STEPS = [
     panel: () => {
       const note = S.project.notes[0];
       return `<label>Production message<textarea id="message" rows="3">${esc(S.typed.note ?? sampleMessage())}</textarea></label>
-      <div class="row"><select id="message-model" aria-label="Model"><option value="gemma-4-31b-it">Gemma 4 31B · high thinking</option><option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite · high thinking</option></select><button class="${note ? "" : "primary"}" data-action="message" ${S.config.model_configured ? "" : "disabled"}>Read the message</button></div>
+      <div class="row"><select id="message-model" aria-label="Model"><option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite · high thinking</option></select><button class="${note ? "" : "primary"}" data-action="message" ${S.config.model_configured ? "" : "disabled"}>Read the message</button></div>
       <p class="fine">${S.project.context?.kind === "retrospective" ? "This sample message is hypothetical. The festival did not send it." : "A sample message. Replace it with yours."}</p>
       ${note ? reviewList(note) : ""}`;
     },
@@ -767,17 +779,54 @@ function missingLine() {
   const names = open.length <= 3 ? ` (${open.map((a) => esc(a.name)).join(", ")})` : "";
   return `<p class="fine">Qloo has no exact match for ${plural(open.length, "act")}${names}, so their clashes are unknown, not zero. <button class="link" data-action="identities">Find them</button></p>`;
 }
+const SAVED_DAY = "bonnaroo-2026-sunday";
+const MODEL_WORDS = { "gemini-3.8-flash": "Gemini 3.8 Flash", "gemini-3.5-flash-lite": "Gemini 3.5 Flash Lite" };
+const modelName = (m) => MODEL_WORDS[m] || m || "the model";
+const limitsUntouched = () => !S.limits.shortest && !S.limits.curfew && S.limits.drop;
+const usesSavedRun = (text) => hasRecording() && text === S.project.context.recorded_run.message && limitsUntouched();
+function limitsSent() {
+  return { shortest: +S.limits.shortest || null, curfew: +S.limits.curfew || null, allow_drop: S.limits.drop ? null : false };
+}
+function limitsForm() {
+  const end = Math.max(...day().stages.map((s) => s.closes));
+  const times = [];
+  for (let t = end - 120; t <= end + 120; t += 30) times.push(t);
+  const short = [["", "Agent decides"], ["100", "Full length only"], ["85", "85% of its time"], ["75", "75% of its time"], ["60", "60% of its time"]];
+  return `<div class="limits">
+    <label>Shortest a set can get<select id="lim-short">${short.map(([v, w]) => `<option value="${v}" ${S.limits.shortest === v ? "selected" : ""}>${w}</option>`).join("")}</select></label>
+    <label>Last set ends by<select id="lim-end">${times.map((t) => `<option value="${t === end ? "" : t}" ${(S.limits.curfew === "" ? t === end : +S.limits.curfew === t) ? "selected" : ""}>${tm(t)}${t === end ? " (planned end)" : ""}</option>`).join("")}</select></label>
+    <label class="limit-check"><input type="checkbox" id="lim-drop" ${S.limits.drop ? "checked" : ""} /> Sets may be dropped</label>
+  </div>`;
+}
+function askNote(text) {
+  if (!S.config.model_configured && !hasRecording()) return "No model is set up on this server.";
+  if (usesSavedRun(text)) {
+    const r = S.project.context.recorded_run;
+    return `Saved run: no live calls and no cost. Recorded with ${modelName(r.model)}. Change the words, an option or the lineup for a live run.`;
+  }
+  return "Live run: the model decides each step now. It takes a minute or two.";
+}
+// A failure says so plainly and always leaves something to watch: a saved run made real calls once.
+function failBox(title, reason, after) {
+  const id = S.templates.some((t) => t.id === S.template) ? S.template : SAVED_DAY;
+  return `<div class="run-failed" role="alert">
+    <h2>${esc(title)}</h2>
+    <p class="run-reason">${esc(reason)}</p>
+    <p>${esc(after)} You can try again in a minute, or watch a saved run. It is the same agent on the same tools: every step was a real Gemini and Qloo call, recorded once. It plays back with no live calls.</p>
+    <a class="watch-saved" href="/studio?day=${esc(id)}&amp;watch">Watch a saved run</a>
+  </div>`;
+}
 function askForm() {
   const a = S.agent;
   const typed = S.typed.agent ?? (S.again ? "" : a?.message || S.proposal?.message || sampleMessage());
-  const recorded = hasRecording() && typed === S.project.context.recorded_run.message;
   const offline = !S.config.model_configured && !hasRecording();
   return `<form class="ask" id="ask">
     <label for="agent-message">What went wrong?</label>
     <textarea id="agent-message" rows="${Math.min(8, Math.max(4, Math.ceil(typed.length / 58) + 1))}" placeholder="Main stage is closed 18:00 to 19:00. Curfew is 23:00.">${esc(typed)}</textarea>
-    ${a?.error ? `<p class="status error">${esc(a.error)}</p>` : ""}
-    <div class="ask-foot"><button class="primary big" id="ask-go" ${offline ? "disabled" : ""}>Fix this day</button><span class="hint"><kbd>Enter</kbd> starts it. Nothing changes until you approve.</span></div>
-    <p class="fine" id="ask-note">${recorded ? "This is what really happened that day. It plays a saved run of the agent. Change the words for a live run." : S.project.context?.template && !S.again ? "An example problem. Replace it with anything." : ""}${offline ? " No model is set up on this server." : ""}</p>
+    ${a?.error ? failBox("The live run failed", a.error, "Nothing on your timetable changed.") : ""}
+    ${limitsForm()}
+    <div class="ask-foot"><button class="primary big" id="ask-go" ${offline ? "disabled" : ""}>${usesSavedRun(typed) ? "Play the saved run" : "Fix this day"}</button>${S.retrying || S.again ? `<button type="button" class="ask-cancel" data-action="cancel-edit">Cancel</button>` : ""}<span class="hint"><kbd>Enter</kbd> starts it. Nothing changes until you approve.</span></div>
+    <p class="fine" id="ask-note">${esc(askNote(typed))}</p>
   </form>`;
 }
 function headline(strong, rest = "") {
@@ -799,11 +848,37 @@ function flowRunning() {
   const trace = S.agent?.trace || [];
   const last = trace.at(-1);
   return `<div class="flow-run">
-    <p class="eyebrow">${S.agent?.mode === "live" ? "Live run: the model is deciding now" : "Saved run of the agent"}</p>
+    <p class="eyebrow">${S.agent?.mode === "live" ? "Live run: the model is deciding now" : `Saved run, recorded with ${esc(modelName(S.project.context?.recorded_run?.model))}. No live calls.`}</p>
     ${headline("Working on it")}
     <p class="flow-say">${last?.thought ? esc(last.thought) : "Reading what you wrote…"}</p>
     <ol class="live-steps">${trace.map((t) => `<li class="${t.ok ? "" : "refused"}"><strong>${esc(TOOL_WORDS[t.tool] || "Tried a step")}</strong> ${esc(t.line)}</li>`).join("")}<li class="now"><span class="spin" aria-hidden="true"></span>${trace.length ? "Next step…" : "Starting…"}</li></ol>
   </div>`;
+}
+function planSource() {
+  const p = S.proposal;
+  if (p.changed_by_ask) return "New plan from your request";
+  if (p.mode === "live") return `Live run with ${esc(modelName(p.model))}`;
+  return `Saved run, recorded with ${esc(modelName(p.model))}. No live calls`;
+}
+// What Qloo did for this plan, from the same solve run with every Qloo signal removed.
+const popularity = (id) => (act(id).draw == null ? "" : ` (Qloo popularity ${Math.round(act(id).draw * 100)})`);
+function qlooCompare(o) {
+  const a = o.audit;
+  const blind = o.without_qloo || {};
+  const b = blind.audit;
+  return {
+    blind,
+    prot: blind.protected || [],
+    lost: b ? b.cuts.filter((id) => !a.cuts.includes(id)) : [],
+    kept: b ? a.cuts.filter((id) => !b.cuts.includes(id)) : [],
+  };
+}
+function qlooLine(o) {
+  const { blind, prot, lost, kept } = qlooCompare(o);
+  if (prot.length) return `Without Qloo, ${prot.map((x) => `<strong>${pairName(x.a, x.b)}</strong>`).join(", ")} would still clash.`;
+  if (lost.length) return `Without Qloo it would drop ${lost.map((id) => `<strong>${esc(act(id).name)}</strong>${popularity(id)}`).join(", ")}${kept.length ? ` instead of ${kept.map((id) => `<strong>${esc(act(id).name)}</strong>${popularity(id)}`).join(", ")}` : ""}.`;
+  if (blind.identical) return "On this problem the same plan comes out without Qloo.";
+  return "Without Qloo the plan differs but leaves no extra clash.";
 }
 function flowPlan() {
   const o = finalOption();
@@ -813,19 +888,9 @@ function flowPlan() {
   const left = a.conflicts.filter((c) => c.source === "qloo" || c.source === "must_see").length;
   const ran = S.project.as_run_audit;
   const lost = a.cuts.length;
-  const blind = o.without_qloo || {};
-  const prot = blind.protected || [];
-  const extra = (blind.dropped || []).filter((id) => !a.cuts.includes(id));
-  const qloo = prot.length
-    ? `Without Qloo, ${prot.map((x) => `<strong>${pairName(x.a, x.b)}</strong>`).join(", ")} would still clash.`
-    : extra.length
-      ? `Without Qloo it would drop ${extra.map((id) => `<strong>${esc(act(id).name)}</strong>`).join(", ")} instead.`
-      : blind.identical
-        ? "On this problem the same plan comes out without Qloo."
-        : "Without Qloo the plan differs but leaves no extra clash.";
   return `<div class="flow-plan">
     <div>
-      <p class="eyebrow">${S.agent?.mode === "live" ? "Plan from a live run" : "Plan from a saved run"} · nothing has changed yet</p>
+      <p class="eyebrow">${planSource()} · nothing has changed yet</p>
       ${headline(lost ? `${total - lost} of ${total} sets play.` : `All ${total} sets play.`, `${left ? plural(left, "clash", "clashes") : "No clashes"} left.`)}
       <ul class="tally">
         <li><strong>${before} → ${left}</strong> clashes</li>
@@ -833,11 +898,12 @@ function flowPlan() {
         <li><strong>${a.trim_minutes}</strong> minutes shorter</li>
         <li><strong>${lost}</strong> dropped${ran ? `, ${ran.cuts.length} on the real day` : ""}</li>
       </ul>
-      <p class="flow-say">${qloo}</p>
+      <p class="flow-say">${qlooLine(o)}</p>
     </div>
     <div class="flow-decide">
       <button class="primary big" data-action="publish" data-option="0" id="approve">Approve this plan</button>
       <button data-action="retry">Change what went wrong</button>
+      ${S.proposal.parent ? `<button data-action="plan-back">Back to the last plan</button>` : ""}
     </div>
   </div>`;
 }
@@ -862,11 +928,12 @@ function flowLoading() {
 }
 function flowProblem() {
   return `<div class="flow-run"><p class="eyebrow">${esc(day().name)}</p>${headline("Qloo could not read this day yet.")}<p class="flow-say">${esc(S.problem)}</p>
-    <div class="flow-decide row"><button class="primary" data-action="prepare">Try again</button><button data-action="identities">Find acts by hand</button><button data-action="path-day">Change the lineup</button></div></div>`;
+    <div class="flow-decide row"><button class="primary" data-action="prepare">Try again</button><button data-action="identities">Find acts by hand</button><button data-action="path-day">Change the lineup</button><a class="watch-saved" href="/studio?day=${SAVED_DAY}&amp;watch">Watch a saved run</a></div></div>`;
 }
 function flowStage() {
   if (S.loading) return "loading";
   if (S.agentRunning) return "running";
+  if (S.retrying && finalOption()) return "fix";
   if (finalOption()) return "plan";
   if (noPlan()) return "noplan";
   if (S.project.status === "PUBLISHED" && S.project.versions.length && !S.again) return "sent";
@@ -885,12 +952,23 @@ function renderFlow() {
   renderAfter(stage);
   const box = $("#agent-message");
   if (box) {
+    const showRunKind = () => {
+      $("#ask-note").textContent = askNote(box.value);
+      $("#ask-go").textContent = usesSavedRun(box.value) ? "Play the saved run" : "Fix this day";
+    };
     box.oninput = () => {
       S.typed.agent = box.value;
-      const note = $("#ask-note");
-      if (note && hasRecording() && box.value !== S.project.context.recorded_run.message) note.textContent = "A live run: the model decides each step now. It takes a minute or two.";
+      showRunKind();
     };
+    $("#lim-short").onchange = (e) => ((S.limits.shortest = e.target.value), showRunKind());
+    $("#lim-end").onchange = (e) => ((S.limits.curfew = e.target.value), showRunKind());
+    $("#lim-drop").onchange = (e) => ((S.limits.drop = e.target.checked), showRunKind());
     box.onkeydown = (e) => {
+      if (e.key === "Escape" && (S.retrying || S.again)) {
+        e.preventDefault();
+        actions["cancel-edit"]();
+        return;
+      }
       // Enter starts the work. Shift+Enter still makes a new line.
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
@@ -919,7 +997,7 @@ function startFix() {
     box.focus();
     return;
   }
-  const recorded = hasRecording() && box.value === S.project.context.recorded_run.message;
+  const recorded = usesSavedRun(box.value);
   guarded(() => actions.agent({ dataset: { mode: recorded ? "replay" : "live" } }));
 }
 function renderPath(stage) {
@@ -931,20 +1009,194 @@ function renderPath(stage) {
     else li.removeAttribute("aria-current");
   });
 }
+// ---------- Below the timetable ----------
+function shiftWords(n) {
+  if (!n) return "Same start";
+  const abs = Math.abs(n);
+  const size = abs >= 60 ? `${Math.floor(abs / 60)} h${abs % 60 ? ` ${abs % 60}` : ""}` : `${abs} min`;
+  return `${size} ${n > 0 ? "later" : "earlier"}`;
+}
+function changedSets(o) {
+  const draft = Object.fromEntries(day().draft.map((p) => [p.act_id, p]));
+  return o.placements
+    .map((p) => {
+      const d = draft[p.act_id];
+      const a = act(p.act_id);
+      const len = lengthOf(p, a);
+      if (!p.cut && d.stage_id === p.stage_id && d.start === p.start && len === a.duration) return null;
+      return { id: a.id, name: a.name, cut: !!p.cut, from: `${stage(d.stage_id).name} ${tm(d.start)}`, to: p.cut ? "" : `${stage(p.stage_id).name} ${tm(p.start)}`, shift: p.cut ? 0 : p.start - d.start, len, full: a.duration };
+    })
+    .filter(Boolean)
+    .sort((x, y) => y.cut - x.cut || Math.abs(y.shift) - Math.abs(x.shift));
+}
+function changeLines(o) {
+  const a = o.audit;
+  const sets = changedSets(o);
+  const before = S.project.audit.conflicts.filter((c) => c.source === "qloo" || c.source === "must_see").length;
+  const left = a.conflicts.filter((c) => c.source === "qloo" || c.source === "must_see").length;
+  const moved = sets.filter((x) => !x.cut && x.from !== x.to);
+  const short = sets.filter((x) => !x.cut && x.len !== x.full);
+  const lines = [`Clashes between acts that share a crowd: ${before} before, ${left} now.`];
+  if (moved.length) lines.push(`${plural(moved.length, "set")} ${moved.length === 1 ? "moves" : "move"}. The furthest is ${esc(moved[0].name)}, ${shiftWords(moved[0].shift)}.`);
+  if (short.length) lines.push(`${plural(short.length, "set")} ${short.length === 1 ? "runs" : "run"} shorter, ${a.trim_minutes} minutes in all.`);
+  lines.push(a.cuts.length ? `Dropped: ${a.cuts.map((id) => esc(act(id).name)).join(", ")}.` : "Nothing is dropped.");
+  lines.push(qlooLine(o));
+  lines.push((o.not_proven || []).some((x) => PROOF_WORDS[x]) ? "This is the best plan found in the time allowed. It is not proven best." : "The solver proved no better plan exists on these terms.");
+  return lines;
+}
+function summaryBox() {
+  const o = finalOption();
+  return `<section class="agent-summary" id="agent-summary">
+    <div class="summary-top"><div><h2>Agent summary</h2><p>${esc(S.proposal.summary)}</p></div>
+    <button data-action="summary-more" aria-expanded="${S.fullSummary}">${S.fullSummary ? "Hide the details" : "Show the full summary"}</button></div>
+    ${S.fullSummary ? `<ul>${changeLines(o).map((x) => `<li>${x}</li>`).join("")}</ul>` : ""}
+  </section>`;
+}
+function changesPanel(o) {
+  const sets = changedSets(o);
+  if (!sets.length) return `<p class="lower-empty">No set moves.</p>`;
+  const shown = S.allChanges ? sets : sets.slice(0, 8);
+  return `<ul class="changes">${shown
+    .map(
+      (x) => `<li><div class="change-text"><strong>${esc(x.name)}</strong><span>${x.cut ? `${esc(x.from)}, now not playing` : x.from === x.to ? esc(x.to) : `${esc(x.from)} → ${esc(x.to)}`}</span></div>
+      <span class="change-tag ${x.cut ? "lost" : ""}">${x.cut ? "Dropped" : x.len !== x.full ? `${x.len} of ${x.full} min` : shiftWords(x.shift)}</span>
+      <button class="link" data-action="ask-chip" data-text="Why ${x.cut ? `was ${esc(x.name)} dropped` : `did ${esc(x.name)} change`}?">Why?</button></li>`,
+    )
+    .join("")}</ul>${sets.length > shown.length ? `<button class="link show-all" data-action="all-changes">Show all ${sets.length}</button>` : ""}`;
+}
+function messagesPanel() {
+  const notes = S.proposal.notices;
+  if (!notes.length) return `<p class="lower-empty">No act needs a message.</p>`;
+  return `<ul class="plan-notes">${notes
+    .map((n, i) => `<li><div><strong>${esc(n.act)}</strong><p>${esc(n.text.replace(`${n.act}: `, ""))}</p></div><button data-action="copy-plan-note" data-i="${i}">Copy</button></li>`)
+    .join("")}</ul><p class="lower-foot">Counterset never sends anything. You copy each message and send it yourself.</p>`;
+}
+function stepsPanel(o) {
+  const trace = S.agent?.trace || S.proposal.trace || [];
+  return `<ol class="agent-steps">${trace
+    .map((t) => `<li class="${t.ok ? "" : "refused"}"><strong>${esc(TOOL_WORDS[t.tool] || "Tried a step")}</strong><p>${esc(t.line)}</p>${t.view?.placements ? `<button class="link" data-action="view" data-view="step${t.n}">Show on the timetable</button>` : ""}</li>`)
+    .join("")}</ol><p class="lower-foot">Every number comes from the solver, and a separate validator rechecks the plan.</p>`;
+}
+function lowerMain() {
+  const o = finalOption();
+  const tabs = [["changes", `What moves (${changedSets(o).length})`], ["messages", `Messages (${S.proposal.notices.length})`], ["steps", `Agent's steps (${(S.agent?.trace || S.proposal.trace || []).length})`]];
+  return `<div class="lower-tabs" role="tablist">${tabs.map(([k, w]) => `<button role="tab" aria-selected="${S.lower === k}" data-action="lower" data-tab="${k}">${w}</button>`).join("")}</div>
+  <div class="lower-panel">${S.lower === "messages" ? messagesPanel() : S.lower === "steps" ? stepsPanel(o) : changesPanel(o)}</div>`;
+}
+function askSuggestions(o) {
+  const sets = changedSets(o);
+  const out = [];
+  if (sets[0]) out.push(sets[0].cut ? `Why was ${sets[0].name} dropped?` : `Why did ${sets[0].name} change?`);
+  const moved = sets.find((x) => !x.cut);
+  if (moved) out.push(`Keep ${moved.name} in its original slot`);
+  const cut = sets.find((x) => x.cut);
+  out.push(cut ? `Who could replace ${cut.name}?` : "Which clash mattered most?");
+  return out;
+}
+function askPanel() {
+  const chat = S.proposal.chat || [];
+  const off = !S.config.model_configured;
+  return `<section class="ask-agent" aria-label="Ask the agent">
+    <h2>Ask the agent</h2>
+    <p class="ask-say">Ask why it did something, or ask for a change. It can check Qloo again and rebuild the plan. You still approve.</p>
+    ${chat.length ? `<ol class="chat">${chat.map((c) => `<li><p class="chat-q">${esc(c.q)}</p><p class="chat-a">${esc(c.a)}</p>${c.changed ? `<span class="chat-new">New plan on the timetable</span>` : ""}</li>`).join("")}</ol>` : ""}
+    ${S.asking ? `<p class="ask-live"><span class="spin" aria-hidden="true"></span><span id="ask-line">${esc(S.askLine)}</span></p>` : ""}
+    ${S.askError ? failBox("The agent could not answer", S.askError, "The plan above has not changed.") : ""}
+    <form id="ask-agent-form" class="ask-agent-form">
+      <textarea id="ask-agent-text" rows="2" aria-label="Your question" placeholder="Move The Strokes earlier, or ask why a set moved" ${S.asking || off ? "disabled" : ""}>${esc(S.typed.ask || "")}</textarea>
+      <button class="primary" ${S.asking || off ? "disabled" : ""}>Ask</button>
+    </form>
+    ${S.asking || off ? "" : `<div class="ask-chips">${askSuggestions(finalOption()).map((q) => `<button type="button" data-action="ask-chip" data-text="${esc(q)}">${esc(q)}</button>`).join("")}</div>`}
+    <p class="lower-foot">${off ? "No model is set up on this server." : `Questions always run live on ${esc(modelName(S.config.models?.[0]))}.`}</p>
+  </section>`;
+}
+function qlooVerdict(o) {
+  const { blind, prot, lost, kept } = qlooCompare(o);
+  if (prot.length) return `Without Qloo, ${plural(prot.length, "more pair")} that share a crowd would play at the same time.`;
+  if (lost.length && kept.length) return `Both plans play the same number of sets. Qloo changes who goes: without it, a far bigger crowd loses its set.`.replace("a far bigger crowd loses its set", lost.every((id) => kept.every((k) => (act(id).draw ?? 0) > (act(k).draw ?? 0))) ? "a bigger crowd loses its set" : "a different act loses its set");
+  if (blind.identical) return "Qloo changes nothing on this problem. The same plan comes out without it, because nothing that shares a crowd was at risk.";
+  return "On this problem Qloo leaves the plan no better on clashes or drops. Only the details differ.";
+}
+function qlooCard() {
+  const o = finalOption();
+  const a = o.audit;
+  const b = o.without_qloo?.audit;
+  if (!b) return "";
+  const total = day().acts.length;
+  const clashes = (x) => x.conflicts.filter((c) => c.source === "qloo" || c.source === "must_see").length;
+  const lost = (x) => (x.cuts.length ? x.cuts.map((id) => `${esc(act(id).name)}${popularity(id)}`).join(", ") : "Nobody");
+  const rows = [
+    ["Sets that play", `${total - a.cuts.length} of ${total}`, `${total - b.cuts.length} of ${total}`],
+    ["Dropped", lost(a), lost(b)],
+    ["Clashes left", clashes(a), clashes(b)],
+    ["Minutes shortened", a.trim_minutes, b.trim_minutes],
+    ["Sets moved", a.moves, b.moves],
+  ];
+  return `<section class="qloo-card">
+    <div class="qloo-card-head"><div><h2>What Qloo changed</h2><p>${esc(qlooVerdict(o))}</p></div>${o.without_qloo.placements && !o.without_qloo.identical ? `<button data-action="view" data-view="blind0">See it without Qloo</button>` : ""}</div>
+    <table><thead><tr><th></th><th>With Qloo</th><th>Without Qloo</th></tr></thead><tbody>${rows.map(([k, x, y]) => `<tr class="${String(x) === String(y) ? "" : "differs"}"><th>${k}</th><td>${x}</td><td>${y}</td></tr>`).join("")}</tbody></table>
+  </section>`;
+}
+async function askAgent(raw) {
+  const text = raw.trim();
+  if (!text || S.asking || !finalOption()) return;
+  S.asking = true;
+  S.askLine = "Reading your question…";
+  S.askError = "";
+  S.typed.ask = "";
+  renderAfter("plan");
+  try {
+    const start = await api(`/proposals/${S.proposal.proposal_id || S.proposal.id}/ask`, "POST", { text });
+    for (let n = 0; n < 600; n++) {
+      await new Promise((res) => setTimeout(res, 500));
+      const j = await api(`/jobs/${start.job_id}`);
+      const last = j.trace?.at(-1);
+      if (last && $("#ask-line")) $("#ask-line").textContent = last.line;
+      if (j.status === "FAILED") throw Error(j.error);
+      if (j.status === "COMPLETED") {
+        S.asking = false;
+        await reload();
+        if (j.result.proposal_id) S.view = "opt0";
+        render();
+        return;
+      }
+    }
+    throw Error("The agent is taking too long. Try again.");
+  } catch (e) {
+    S.askError = e.message;
+    S.typed.ask = text;
+  } finally {
+    S.asking = false;
+  }
+  renderAfter("plan");
+}
 function renderAfter(stage) {
   const box = $("#flow-after");
   let out = "";
   if (stage === "plan") {
-    const o = finalOption();
-    out = `<details class="more" ${o.audit.moves + o.audit.cuts.length <= 8 ? "open" : ""}><summary>What moves (${plural(o.audit.moves + o.audit.cuts.length, "set")})</summary>${diffList(o.placements, false)}</details>
-    <details class="more"><summary>Messages drafted for ${plural(S.proposal.notices.length, "act")}</summary><ul class="notices">${S.proposal.notices.map((n) => `<li>${esc(n.text)}</li>`).join("")}</ul></details>
-    <details class="more"><summary>How the agent got there (${plural(S.agent?.trace?.length || 0, "step")})</summary><p>${esc(S.proposal.summary)}</p>${traceList()}<p class="fine">${provenLine(o)} Every number comes from the solver, and a separate validator rechecks the plan.</p></details>`;
+    out = `${summaryBox()}<div class="lower"><div class="lower-main" id="lower-main">${lowerMain()}</div>${askPanel()}</div>${qlooCard()}`;
   } else if (stage === "sent") {
     out = `<div class="more">${sendOut(S.project.versions.at(-1))}</div>`;
   }
+  const hadFocus = document.activeElement?.id === "ask-agent-text";
   box.innerHTML = out;
   applyCss(box);
   if ($("#share-link")) guarded(() => fillShare(S.project.versions.at(-1)));
+  const asker = $("#ask-agent-text");
+  if (asker) {
+    asker.oninput = () => (S.typed.ask = asker.value);
+    asker.onkeydown = (e) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        guarded(() => askAgent(asker.value));
+      }
+    };
+    $("#ask-agent-form").onsubmit = (e) => {
+      e.preventDefault();
+      guarded(() => askAgent(asker.value));
+    };
+    if (hadFocus) asker.focus({ preventScroll: true });
+  }
 }
 function renderWork() {
   if (simple()) renderFlow();
@@ -1044,8 +1296,15 @@ function renderGrid() {
     frame += `<div class="frame lane" data-css="top:${AXIS + i * LANE}px;height:${LANE}px"><div class="lane-name" title="${esc(s.name)}">${esc(s.name)}</div></div>`;
   });
   if (g.cuts) frame += `<div class="frame lane dropped-lane" data-css="top:${AXIS + day().stages.length * LANE}px;height:${g.cutRows * LANE}px"><div class="lane-name">Not playing</div></div>`;
-  for (const o of holdsFor(S.view))
-    frame += `<div class="frame hold" data-css="left:${xOf(g, o.start)}px;top:${yOf(o.stage_id)}px;width:${(o.end - o.start) * g.ppm}px"><span>${(o.end - o.start) * g.ppm < 110 ? "Closed" : `Closed ${tm(o.start)}–${tm(o.end)}`}</span></div>`;
+  const holds = holdsFor(S.view);
+  for (const o of holds) {
+    // Only a closure seen for the first time fades in. A redraw must not replay it.
+    const key = `${S.project.id}|${o.stage_id}|${o.start}|${o.end}`;
+    const fresh = !S.seenHolds.has(key);
+    S.seenHolds.add(key);
+    frame += `<div class="frame hold ${fresh ? "fresh" : ""}" data-css="left:${xOf(g, o.start)}px;top:${yOf(o.stage_id)}px;width:${(o.end - o.start) * g.ppm}px"><span>${(o.end - o.start) * g.ppm < 110 ? "Closed" : `Closed ${tm(o.start)}–${tm(o.end)}`}</span></div>`;
+  }
+  const inClosure = (stageId, start, end) => holds.some((o) => o.stage_id === stageId && o.start < end && start < o.end);
   grid.insertAdjacentHTML("afterbegin", frame);
   applyCss(grid);
 
@@ -1078,14 +1337,15 @@ function renderGrid() {
     const len = lengthOf(p, a);
     const moved = !p.cut && S.view !== "draft" && (draft[a.id].start !== p.start || draft[a.id].stage_id !== p.stage_id);
     const short = !p.cut && len !== a.duration;
-    el.className = `set kind-${a.kind} ${S.view === "draft" && !S.agentRunning && !p.cut ? "movable" : ""} ${a.locked ? "locked" : ""} ${a.qloo_id ? "" : "unresolved"} ${clashIds.has(a.id) ? "clash" : ""} ${moved ? "moved" : ""} ${short ? "short" : ""} ${p.cut ? "cut" : ""} ${invalid.has(a.id) ? "invalid" : ""} ${S.selected?.act === a.id ? "selected" : ""} ${focus && !focus.has(a.id) ? "dim" : ""}`;
+    const blocked = !p.cut && !a.locked && inClosure(p.stage_id, p.start, p.start + len);
+    el.className = `set kind-${a.kind} ${blocked ? "blocked" : ""} ${S.view === "draft" && !S.agentRunning && !p.cut ? "movable" : ""} ${a.locked ? "locked" : ""} ${a.qloo_id ? "" : "unresolved"} ${clashIds.has(a.id) ? "clash" : ""} ${moved ? "moved" : ""} ${short ? "short" : ""} ${p.cut ? "cut" : ""} ${invalid.has(a.id) ? "invalid" : ""} ${S.selected?.act === a.id ? "selected" : ""} ${focus && !focus.has(a.id) ? "dim" : ""}`;
     // Wide enough for a name: a very short set may draw a few minutes into its changeover.
     const chrome = 6 + (moved || clashIds.has(a.id) ? 4 : 2) + (short ? 3 : 0);
     const w = p.cut ? CUT_W - 4 : Math.max(Math.min(72, widestWord(a.name) * (10 / 11.5) + chrome + 1), 56, len * g.ppm - 3);
     el.style.width = w + "px";
     el.classList.toggle("narrow", w < 96);
     const roomy = p.cut || w >= 96;
-    el.title = p.cut ? `${a.name}: not playing` : `${a.name} · ${stage(p.stage_id).name} ${tm(p.start)}–${tm(p.start + len)}${short ? ` (${len} of ${a.duration} min)` : ""}`;
+    el.title = p.cut ? `${a.name}: not playing` : `${a.name} · ${stage(p.stage_id).name} ${tm(p.start)}–${tm(p.start + len)}${short ? ` (${len} of ${a.duration} min)` : ""}${blocked ? ". This slot is closed, so the set has to change." : ""}`;
     if (p.cut) {
       el.style.transform = `translate(${LABEL + (cutIndex % g.perRow) * CUT_W}px, ${AXIS + (day().stages.length + Math.floor(cutIndex / g.perRow)) * LANE + 4}px)`;
       cutIndex++;
@@ -1101,7 +1361,8 @@ function renderGrid() {
         ? `${a.name}, not playing`
         : `${a.name}, ${stage(p.stage_id).name} ${tm(p.start)} to ${tm(p.start + len)}${short ? `, shortened to ${len} of ${a.duration} minutes` : ""}${a.locked ? ", locked" : ""}${moved ? `, moved from ${stage(draft[a.id].stage_id).name} ${tm(draft[a.id].start)}` : ""}${clashIds.has(a.id) ? ", in a clash" : ""}${a.qloo_id ? "" : ", identity unresolved"}`,
     );
-    if (moved) {
+    // The old slot is not worth drawing when it sits inside a closure: that is why the set left.
+    if (moved && !inClosure(draft[a.id].stage_id, draft[a.id].start, draft[a.id].start + a.duration)) {
       const gh = document.createElement("div");
       gh.className = "ghost-set";
       gh.style.width = el.style.width;
@@ -1282,6 +1543,10 @@ function renderViews() {
       : views.length === 1
       ? `<span class="solo">${views[0][1]}</span>`
       : views.map(([v, label]) => `<button role="tab" class="${v.startsWith("blind") ? "blind" : ""}" data-action="view" data-view="${v}" aria-selected="${v === S.view}">${label}</button>`).join("");
+  const note = $("#view-note");
+  const shown = S.view.startsWith("blind") && S.proposal?.agent && finalOption() ? qlooVerdict(finalOption()) : "";
+  note.textContent = shown ? `Without Qloo: ${shown}` : "";
+  note.hidden = !shown;
   const on = $('#views [aria-selected="true"]');
   if (on) {
     const box = $("#views");
@@ -1294,7 +1559,8 @@ function renderLegend() {
   if (S.view !== "draft") items.push(`<span><i class="moved"></i>Moved (outline: old slot)</span>`);
   if ((placementsFor(S.view) || []).some((p) => p.length)) items.push(`<span><i class="short"></i>Shortened</span>`);
   if (day().acts.some((a) => !a.qloo_id)) items.push(`<span><i class="unknown"></i>Not in Qloo</span>`);
-  if (holdsFor(S.view).length) items.push(`<span><i class="hold"></i>Closed</span>`);
+  if (holdsFor(S.view).length) items.push(`<span title="The stage cannot be used in this time, so no set can play there."><i class="hold"></i>Closed: no set can play here</span>`);
+  if ((placementsFor(S.view) || day().draft).some((p) => !p.cut && !act(p.act_id).locked && holdsFor(S.view).some((o) => o.stage_id === p.stage_id && o.start < p.start + lengthOf(p, act(p.act_id)) && p.start < o.end))) items.push(`<span><i class="blocked"></i>Has to change: its slot is closed</span>`);
   if ((auditFor(S.view) || S.project.audit).invalid?.length) items.push(`<span><i class="invalid"></i>Breaks a rule</span>`);
   if (S.view === "draft" && matchMedia("(pointer: fine)").matches && !S.agentRunning) items.push(`<span class="hint">Drag a set to move it</span>`);
   $("#legend").innerHTML = items.join("") + (hasEvidence() && !simple() ? `<button class="quiet" data-action="cues" aria-pressed="${S.allCues}">${S.allCues ? "Hide" : "Show"} all pairs</button>` : "");
@@ -1416,6 +1682,12 @@ async function openProject(id) {
   S.loading = null;
   S.problem = null;
   S.again = false;
+  S.retrying = false;
+  S.limits = { shortest: "", curfew: "", drop: true };
+  S.lower = "changes";
+  S.allChanges = false;
+  S.fullSummary = false;
+  S.askError = "";
   S.lastStage = null;
   const saved = store.get("counterset-step-" + id);
   S.step = saved !== null ? +saved : S.project.context?.recorded_run ? stepIndex("agent") : stepIndex("bill");
@@ -1806,6 +2078,7 @@ const actions = {
     const text = mode === "replay" ? S.project.context.recorded_run.message : $("#agent-message")?.value || sampleMessage();
     S.typed.agent = undefined;
     S.again = false;
+    S.retrying = false;
     say("");
     S.agent = { trace: [], mode, message: text };
     S.agentRunning = true;
@@ -1815,7 +2088,7 @@ const actions = {
     S.step = stepIndex("agent");
     render();
     try {
-      const start = await api(`/projects/${S.project.id}/agent`, "POST", { version: S.project.version, text, mode });
+      const start = await api(`/projects/${S.project.id}/agent`, "POST", { version: S.project.version, text, mode, ...(mode === "live" ? { limits: limitsSent() } : {}) });
       let seen = 0;
       for (let n = 0; n < 900; n++) {
         await new Promise((res) => setTimeout(res, 500));
@@ -1858,11 +2131,37 @@ const actions = {
     if (!simple() && S.step === stepIndex("crowds")) renderStep();
   },
   retry: () => {
+    S.retrying = true;
     S.typed.agent = S.proposal?.message ?? S.agent?.message;
-    S.proposal = null;
-    S.agent = { trace: [], mode: "live", message: S.typed.agent };
-    S.view = "draft";
-    S.selected = null;
+    S.lastStage = null;
+    render();
+  },
+  "cancel-edit": () => {
+    S.retrying = false;
+    S.again = false;
+    S.typed.agent = undefined;
+    S.lastStage = null;
+    render();
+  },
+  "summary-more": () => {
+    S.fullSummary = !S.fullSummary;
+    $("#agent-summary").outerHTML = summaryBox();
+  },
+  lower: (t) => {
+    S.lower = t.dataset.tab;
+    $("#lower-main").innerHTML = lowerMain();
+  },
+  "all-changes": () => {
+    S.allChanges = true;
+    $("#lower-main").innerHTML = lowerMain();
+  },
+  "copy-plan-note": (t) => copyText(S.proposal.notices[+t.dataset.i].text, "Message copied."),
+  "ask-chip": (t) => askAgent(t.dataset.text),
+  "plan-back": () => {
+    const before = S.project.proposals.find((x) => x.id === S.proposal.parent);
+    if (!before) return say("That plan is no longer on this server.", true);
+    S.proposal = { ...before, proposal_id: before.id };
+    S.view = "opt0";
     render();
   },
   again: () => {
@@ -1981,13 +2280,28 @@ const actions = {
     await actions.repair();
   },
   publish: async (t) => {
+    // A slow server invites a second press. Only the first one counts.
+    if (S.publishing || !S.proposal) return;
+    S.publishing = true;
     const pid = S.proposal.proposal_id || S.proposal.id;
-    const r = await api(`/projects/${S.project.id}/publish`, "POST", { version: S.project.version, proposal_id: pid, option: +t.dataset.option });
-    S.view = "draft";
-    S.proposal = null;
-    S.agent = null;
-    S.terms = null;
-    await reload();
+    const label = t.textContent;
+    t.disabled = true;
+    t.textContent = "Approving…";
+    let r;
+    try {
+      r = await api(`/projects/${S.project.id}/publish`, "POST", { version: S.project.version, proposal_id: pid, option: +t.dataset.option });
+      S.view = "draft";
+      S.proposal = null;
+      S.agent = null;
+      S.terms = null;
+      await reload();
+    } catch (e) {
+      t.disabled = false;
+      t.textContent = label;
+      throw e;
+    } finally {
+      S.publishing = false;
+    }
     $("#grid").classList.add("stamp");
     setTimeout(() => $("#grid").classList.remove("stamp"), 800);
     S.step = stepIndex("approve");

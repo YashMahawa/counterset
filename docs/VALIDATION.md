@@ -6,16 +6,16 @@ Three separate questions, answered separately:
 2. **Is Qloo good evidence for the decision?** See [evaluation](EVALUATION.md).
 3. **Does it help programmers or fans?** Not measured. See [evaluation](EVALUATION.md).
 
-## Backend: 53 tests pass
+## Backend: 88 tests pass
 
 `.venv/bin/python -m pytest -q` reports `53 passed, 1 warning`. The warning is an upstream Starlette/httpx deprecation and does not affect results.
 
 | File | Tests |
 | --- | ---: |
-| `tests/test_agent.py` | 17 |
+| `tests/test_agent.py` | 48 |
 | `tests/test_engine.py` | 21, of which 8 cover rescues |
 | `tests/test_api.py` | 10 |
-| `tests/test_providers.py` | 5 |
+| `tests/test_providers.py` | 9 |
 
 ### The rescue agent (`tests/test_agent.py`)
 
@@ -75,7 +75,7 @@ Final run on 30 October against the live site, with `LIVE=1`: 66 of 66 checks pa
 - the desk: the agent's steps appear and finish, nothing changes before approval, the as-run view shows 11 cancelled sets, the without-Qloo view opens, and approval publishes a version;
 - the CSV export, an ordinary repair on another day, and no console or page errors.
 
-**Result on this build: NOT RECORDED HERE. To be filled in from a real run of `scripts/browser_test.cjs` on the final build.**
+Result on this build, locally: 190 of 190 checks pass across 1440 and 390 pixels wide, including hover contrast, a failed live run offering a saved run, a double press on approve, and all four saved runs. A live run with questions to the agent was run by hand against real Gemini and Qloo calls.
 
 Earlier walkthroughs passed on previous designs. They say nothing about this page.
 

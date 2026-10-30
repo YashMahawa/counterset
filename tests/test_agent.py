@@ -10,8 +10,9 @@ from app.domain import Day
 from app.main import create_app
 from app.mcp import call
 from app.providers import ProviderError
+from app.repair import apply_scenario
 
-H = {"x-counterset": "workspace"}
+H ={"x-counterset": "workspace"}
 MESSAGE = "Lightning. Site closed 14:00 to 15:00. Hard stop 19:00. Save what you can."
 
 
@@ -572,3 +573,108 @@ def test_a_broken_model_reply_is_asked_again_before_the_run_stops():
             return {"tool": "audit"}, {}
 
     assert desk_agent.ask_model(Flaky(), "p", "m")[0] == {"tool": "audit"} and Flaky.calls == 2
+
+
+# ---------- Ask the agent, the programmer's limits, and an act's own hours ----------
+def planned(c, app, cfg, decisions=GOOD):
+    """A finished live plan from scripted decisions, ready to ask about."""
+    p = c.post("/api/examples/mini", headers=H).json()
+    turns = iter(decisions)
+    app.state.gateway.model = lambda prompt, model, max_tokens=0: (next(turns), {"usage": {"totalTokenCount": 10}})
+    j = finish(c, c.post(f"/api/projects/{p['id']}/agent", headers=H, json={"version": 1, "text": MESSAGE, "mode": "live"}).json()["job_id"])
+    assert j["status"] == "COMPLETED", j
+    return p, j["result"]["proposal_id"]
+
+
+def ask(c, app, pid, decisions, text="Why did it change?"):
+    turns = iter(decisions)
+    app.state.gateway.model = lambda prompt, model, max_tokens=0: (next(turns), {})
+    start = c.post(f"/api/proposals/{pid}/ask", headers=H, json={"text": text})
+    assert start.status_code == 200, start.text
+    return finish(c, start.json()["job_id"])
+
+
+def test_asking_why_answers_without_changing_the_plan(tmp_path):
+    c, app, cfg = ready(tmp_path)
+    p, pid = planned(c, app, cfg)
+    act = day().acts[0].id
+    j = ask(c, app, pid, [{"thought": "look", "tool": "explain_act", "args": {"act_id": act}}, {"thought": "say", "tool": "answer", "args": {"text": "Its slot was closed, so it moved."}}])
+    assert j["status"] == "COMPLETED", j
+    assert j["result"]["answer"].startswith("Its slot") and "proposal_id" not in j["result"]
+    after = c.get(f"/api/projects/{p['id']}").json()
+    assert after["version"] == 1 and after["proposals"][0]["id"] == pid
+    assert after["proposals"][0]["chat"][0]["q"] == "Why did it change?"
+
+
+def test_an_answer_with_an_invented_number_is_refused(tmp_path):
+    c, app, cfg = ready(tmp_path)
+    p, pid = planned(c, app, cfg)
+    j = ask(c, app, pid, [{"thought": "x", "tool": "answer", "args": {"text": "This sells 98765 more tickets."}}, {"thought": "fix", "tool": "answer", "args": {"text": "The plan keeps every set I could."}}])
+    assert j["status"] == "COMPLETED", j
+    assert j["trace"][0]["ok"] is False and "98765" in j["trace"][0]["line"]
+    assert "98765" not in j["result"]["answer"]
+
+
+def test_asking_for_a_change_makes_a_new_plan_that_still_waits(tmp_path):
+    c, app, cfg = ready(tmp_path)
+    p, pid = planned(c, app, cfg)
+    act = day().acts[0]
+    start = day().draft[0]
+    change = {"thought": "solve", "tool": "change_plan", "args": {"rules": [{"type": "not_before", "act_id": act.id, "time": f"{(start.start + 15) // 60:02}:{(start.start + 15) % 60:02}"}]}}
+    j = ask(c, app, pid, [change, {"thought": "offer", "tool": "propose_plan", "args": {"plan_id": 0, "answer": "Done. It starts later now."}}], text="Start it later")
+    assert j["status"] == "COMPLETED", j
+    new = j["result"]["proposal_id"]
+    after = c.get(f"/api/projects/{p['id']}").json()
+    assert after["version"] == 1 and not after["day"]["outages"]
+    fresh = after["proposals"][0]
+    assert fresh["id"] == new and fresh["parent"] == pid and fresh["changed_by_ask"] and fresh["trace"]
+    pub = c.post(f"/api/projects/{p['id']}/publish", headers=H, json={"version": 1, "proposal_id": new, "option": 0})
+    assert pub.status_code == 200, pub.text
+
+
+def test_a_rule_that_cannot_hold_changes_nothing(tmp_path):
+    c, app, cfg = ready(tmp_path)
+    p, pid = planned(c, app, cfg)
+    act = day().acts[0].id
+    j = ask(c, app, pid, [{"thought": "x", "tool": "change_plan", "args": {"rules": [{"type": "nonsense", "act_id": act}]}}, {"thought": "say", "tool": "answer", "args": {"text": "I cannot do that."}}])
+    assert j["status"] == "COMPLETED", j
+    assert j["trace"][0]["ok"] is False and "proposal_id" not in j["result"]
+
+
+def test_asks_are_capped_per_visitor(tmp_path):
+    c, app, cfg = ready(tmp_path, public=True)
+    cfg.ask_per_hour = 1
+    cfg.agent_per_hour = 5
+    p, pid = planned(c, app, cfg)
+    ask(c, app, pid, [{"thought": "x", "tool": "answer", "args": {"text": "Fine."}}])
+    assert c.post(f"/api/proposals/{pid}/ask", headers=H, json={"text": "Again?"}).status_code == 429
+
+
+def test_the_programmers_limits_bind_the_agent():
+    session = desk_agent.Session(day(), EVIDENCE, {}, MESSAGE, {"shortest": 85, "allow_drop": False, "curfew": 1380})
+    session.called, session.tool_results = [], []
+    with pytest.raises(ValueError, match="85 percent"):
+        session.try_rescue({"shortest_percent": 75, "allow_drop": True})
+    session.try_rescue({"shortest_percent": 85, "allow_drop": True, "curfew": "23:30"})
+    assert session.rescues[0]["scenario"] == {"shortest": 85, "allow_cut": False, "curfew": 1380}
+
+
+def test_a_saved_run_refuses_changed_limits(tmp_path):
+    c, app, cfg = ready(tmp_path, recorded=True)
+    p = c.post("/api/examples/mini", headers=H).json()
+    r = c.post(f"/api/projects/{p['id']}/agent", headers=H, json={"version": 1, "text": MESSAGE, "mode": "replay", "limits": {"shortest": 75}})
+    assert r.status_code == 409
+
+
+def test_a_curfew_keeps_an_acts_own_hours():
+    data = day().model_dump()
+    end = max(s["closes"] for s in data["stages"])
+    data["acts"][0]["latest"] = end - 30
+    moved = apply_scenario(Day.model_validate(data), {"curfew": end + 60})
+    assert moved.acts[0].latest == end - 30
+    assert moved.acts[1].latest >= data["acts"][1]["latest"]
+
+
+def test_the_number_check_reads_times_joined_by_a_dash():
+    assert {"17:20", "19:05"} <= desk_agent.numbers_in(json.dumps({"x": "Yard Act: available 17:20–19:05"}, ensure_ascii=False))
+

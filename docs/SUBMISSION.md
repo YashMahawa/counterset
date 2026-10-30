@@ -30,7 +30,7 @@ It is a working product, not a replay. Paste a lineup, and Qloo looks up and ran
 Qloo is what makes this a question about people rather than boxes. A solver treats every set alike. Qloo tells it who the sets are for, in three ways:
 
 - **Who cannot be on at once.** Each act asks Qloo to rank exactly the other acts on the bill, through `/v2/insights` with `filter.results.entities`, one response per act and kind of act. Two acts that rank each other near the top share a crowd. Ranks are read only inside one response.
-- **Which set to lose.** When a set must go, the lowest Qloo popularity goes first. In the recorded run, removing Qloo makes the same solver drop Japanese Breakfast (99%) in place of Little Stranger (48%), and leaves 1 more shared-crowd clash.
+- **Which set to lose.** When a set must go, the lowest Qloo popularity goes first. In the recorded run, removing Qloo makes the same solver drop Spacey Jane (91%) in place of Little Stranger (48%), and leaves 2 more shared-crowd clashes.
 - **Why, in words a person can check.** `/v2/analysis/compare` gives the taste tags two crowds share.
 
 Every option is solved a second time with Qloo removed, and the app names what changed, including when it changed nothing. An act Qloo cannot identify stays unknown, never zero: 11 of the 28 here, because a wrong match would mean a wrong answer.
@@ -40,7 +40,7 @@ Every option is solved a second time with Qloo removed, and the app names what c
 - **Agent:** a model chooses tools one at a time in a bounded loop. It can only name terms; it cannot produce a schedule. Quotes must be exact, numbers in its summary must exist in the tool results, and it cannot finish until the comparisons have run. The recorded demo replays its decisions and re-runs every tool live.
 - **Solver:** OR-Tools CP-SAT, solving in order of importance: sets dropped, which sets go, attendee must-sees, shared-crowd clashes, minutes shortened, sets moved. It reports what it proved and what is only the best found in the time allowed. When the rules cannot all hold, it names the ones in conflict.
 - **Validator:** a separate pure-Python recount of every rule and objective. If it disagrees with the solver, the result is refused.
-- **App:** FastAPI, SQLite versioning with stale-proposal checks, and vanilla JavaScript. 68 backend tests, including brute-force checks of the solver, and a real-click browser walkthrough at desktop and phone width.
+- **App:** FastAPI, SQLite versioning with stale-proposal checks, and vanilla JavaScript. 88 backend tests, including brute-force checks of the solver, and a real-click browser walkthrough at desktop and phone width.
 
 ### What we found, and what we didn't
 

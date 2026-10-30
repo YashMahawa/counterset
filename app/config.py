@@ -48,8 +48,16 @@ class Config:
         self.model_key = self.values.get("GEMINI_FREE_API_KEY") or free.get(
             "GEMINI_FREE_API_KEY"
         )
-        self.model = "gemma-4-31b-it"
-        self.models = ["gemma-4-31b-it", "gemini-3.5-flash-lite"]
+        # More free keys, taken in turn, so one key's limit does not stop a run. Never logged.
+        self.extra_model_keys = [
+            v for v in (self.values.get(n) or free.get(n) for n in ("GEMINI_FREE_API_KEY_2", "GEMINI_FREE_API_KEY_3")) if v
+        ]
+        for path in filter(None, self.values.get("GEMINI_EXTRA_KEY_FILES", "").split(",")):
+            self.extra_model_keys += list(read_env(path.strip(), "key").values())[:1]
+        self.model = "gemini-3.5-flash-lite"
+        self.models = ["gemini-3.5-flash-lite"]
+        # Every model call thinks. Only these two levels are allowed.
+        self.thinking = "medium" if self.values.get("MODEL_THINKING", "").lower() == "medium" else "high"
         self.limit = min(5000, int(self.values.get("QLOO_SUCCESS_LIMIT", "5000")))
         self.prior = int(self.values.get("QLOO_PRIOR_SUCCESS", "0"))
         self.model_limit = int(self.values.get("MODEL_CALL_LIMIT", "500"))
@@ -70,7 +78,14 @@ class Config:
         # Reading a message, a briefing and an LLM baseline spend the model key too.
         self.model_tasks_per_hour = int(self.values.get("MODEL_TASKS_PER_VISITOR_HOUR", "15"))
         self.model_tasks_per_day = int(self.values.get("MODEL_TASKS_PER_DAY", "150"))
+        # A question to the agent takes a few model calls, and can spend a few Qloo calls too.
+        self.ask_per_hour = int(self.values.get("ASKS_PER_VISITOR_HOUR", "12"))
+        self.ask_per_day = int(self.values.get("ASKS_PER_DAY", "80"))
         self.days_per_hour = int(self.values.get("DAYS_PER_VISITOR_HOUR", "60"))
         # The header a trusted edge sets to the visitor's address, such as cf-connecting-ip.
         # Leave it empty unless that edge overwrites the header, or a visitor could fake it.
         self.client_ip_header = self.values.get("COUNTERSET_CLIENT_IP_HEADER", "").strip().lower()
+
+    @property
+    def model_keys(self):
+        return list(dict.fromkeys([self.model_key, *self.extra_model_keys])) if self.model_key else []

@@ -10,8 +10,8 @@
     <script src="/web/loader.js?v=2"></script>
     <link rel="stylesheet" href="/web/loader.css?v=4" />
     <link rel="stylesheet" href="/web/bar.css?v=3" />
-    <link rel="stylesheet" href="/web/landing.css?v=10" />
-    <script src="/web/landing.js?v=9" defer></script>
+    <link rel="stylesheet" href="/web/landing.css?v=11" />
+    <script src="/web/landing.js?v=10" defer></script>
   </head>
   <body>
     <div class="loader" aria-hidden="true">
@@ -60,6 +60,19 @@
         <div class="replay-top">
           <h2 id="replay-title">Could more sets have played?</h2>
           <p>Bonnaroo, 14 June 2026. The site closed from 13:00 to 17:15. Make two choices and the solver rebuilds the real timetable.</p>
+        </div>
+        <div class="watch" id="watch" hidden>
+          <div class="watch-top">
+            <button class="button" id="watch-play" type="button">Watch the agent work</button>
+            <button class="watch-back" id="watch-back" type="button" hidden>Back to my choices</button>
+            <p class="watch-tag" id="watch-tag"></p>
+          </div>
+          <div class="watch-run" id="watch-run" aria-live="polite" hidden>
+            <p class="watch-message" id="watch-message"></p>
+            <p class="watch-count" id="watch-count"></p>
+            <p class="watch-thought" id="watch-thought"></p>
+            <p class="watch-line" id="watch-line"></p>
+          </div>
         </div>
         <div class="replay" id="live" data-ui>
           <div class="switch" role="group" aria-label="Which day to show">
@@ -124,7 +137,7 @@
           </details>
           <details name="q">
             <summary>Are the days real?</summary>
-            <p>The set times are published ones, and the Qloo rows are real. The problems on Outside Lands and Lollapalooza are examples, and stage sizes and artist hours are assumed. The Bonnaroo storm happened, and that day plays a saved run until you change the words.</p>
+            <p>The set times are published ones, and the Qloo rows are real. The problems on Outside Lands and Lollapalooza are examples, and stage sizes and artist hours are assumed. The Bonnaroo storm happened. All four days play a saved run until you change something, and the page tells you which you are watching.</p>
           </details>
           <details name="q">
             <summary>What happens to my lineup and the API keys?</summary>

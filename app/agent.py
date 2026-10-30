@@ -76,7 +76,7 @@ STAGES: """
         + "\nUNTRUSTED MESSAGE: "
         + json.dumps(text)
     )
-    result, telemetry = gateway.model(prompt, model, max_tokens=6144)
+    result, telemetry = gateway.model(prompt, model, max_tokens=16384)
     items = result.get("items")
     if set(result) != {"items"} or not isinstance(items, list):
         raise ValueError("Model returned an unexpected structure; nothing was proposed")
@@ -150,7 +150,7 @@ def deterministic_briefing(options):
 def brief(day: Day, result, gateway, model):
     options = facts_for_briefing(day, result)
     fallback = deterministic_briefing(options)
-    allowed = numbers_in(json.dumps(options))
+    allowed = numbers_in(json.dumps(options, ensure_ascii=False))
     prompt = (
         """Brief a festival programmer on these computed repair options in at most 70 words. Name the trade-off between options and any pairs kept apart only because of Qloo evidence. Use only names, times and numbers present in FACTS; do not recommend safety or crowd actions; do not claim attendance or ticket effects.
 Return JSON {"briefing": string}.
@@ -158,7 +158,7 @@ FACTS: """
         + json.dumps(options)
     )
     try:
-        result_json, telemetry = gateway.model(prompt, model, max_tokens=2048)
+        result_json, telemetry = gateway.model(prompt, model, max_tokens=8192)
         text = result_json.get("briefing") if set(result_json) == {"briefing"} else None
         if not isinstance(text, str) or not text.strip():
             raise ValueError("No briefing text")

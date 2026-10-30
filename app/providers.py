@@ -30,13 +30,22 @@ class Gateway:
             "model_limit": self.cfg.model_limit,
         }
 
+    def pick_key(self, rows):
+        """The next model key in turn, passing over any that is still cooling off."""
+        count = len(self.cfg.model_keys)
+        turn = rows[-1].get("key", 0) + 1 if rows else 0
+        return min(((turn + i) % count for i in range(count)), key=lambda i: max(0, self.cooling(rows, i) - time.time()))
+
+    @staticmethod
+    def cooling(rows, index):
+        return max((r.get("retry_until", 0) for r in rows if r.get("key", 0) == index), default=0)
+
     def request(self, provider, path, params=None, body=None, model=None):
         if provider == "qloo" and path not in {"/search", "/v2/insights", "/v2/analysis/compare"}:
             raise ProviderError("Endpoint not permitted")
         if provider == "model" and model not in self.cfg.models:
             raise ProviderError("Model not permitted")
-        key = self.cfg.qloo_key if provider == "qloo" else self.cfg.model_key
-        if not key:
+        if not (self.cfg.qloo_key if provider == "qloo" else self.cfg.model_keys):
             raise ProviderError("Provider key is not configured")
         with (self.cfg.private / "provider.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
@@ -47,20 +56,17 @@ class Gateway:
             if provider == "model" and budget["model_attempts"] >= self.cfg.model_limit:
                 raise ProviderError("Model call budget reached")
             previous = [r for r in history if r["provider"] == provider]
-            wait = (
-                max(
-                    0,
-                    (self.cfg.qloo_interval if provider == "qloo" else 5)
-                    - (time.time() - previous[-1]["at"]),
-                )
-                if previous
-                else 0
-            )
-            if previous:
-                wait = max(wait, previous[-1].get("retry_until", 0) - time.time())
+            # Each key keeps its own pace and its own cooldown, so a refused key costs no wait.
+            index = self.pick_key(previous) if provider == "model" else None
+            key = self.cfg.qloo_key if provider == "qloo" else self.cfg.model_keys[index]
+            pace = self.cfg.qloo_interval if provider == "qloo" else 5 / len(self.cfg.model_keys)
+            until = previous[-1].get("retry_until", 0) if provider == "qloo" and previous else self.cooling(previous, index)
+            wait = max(pace - (time.time() - previous[-1]["at"]), until - time.time(), 0) if previous else 0
+            if provider == "model" and until - time.time() > 30:
+                raise ProviderError("Provider cooldown active; retry later")
             if wait:
                 time.sleep(min(wait, 60))
-            if previous and time.time() < previous[-1].get("retry_until", 0):
+            if previous and time.time() < until:
                 raise ProviderError("Provider cooldown active; retry later")
             base = (
                 "https://hackathon.api.qloo.com"
@@ -90,6 +96,10 @@ class Gateway:
                             retry = float(r.headers.get("retry-after", "60"))
                         except ValueError:
                             retry = 60
+                    # A key Google refuses stays out of the rotation for an hour.
+                    if provider == "model" and (status in {401, 403} or (status == 400 and "API_KEY" in r.text)):
+                        retry = 3600
+                        raise ProviderError("The model key was refused; no action applied")
                     if not 200 <= status < 300:
                         raise ProviderError(
                             f"{provider} returned HTTP {status}; no action applied"
@@ -110,6 +120,7 @@ class Gateway:
                                 "at": at,
                                 "retry_until": time.time() + retry if retry else 0,
                                 "model": model,
+                                **({} if index is None else {"key": index}),
                             }
                         )
                         + "\n"
@@ -149,11 +160,14 @@ class Gateway:
             "generationConfig": {
                 "temperature": 0,
                 "maxOutputTokens": max_tokens,
-                "thinkingConfig": {"thinkingLevel": "high"},
+                "thinkingConfig": {"thinkingLevel": self.cfg.thinking},
                 "responseMimeType": "application/json",
             },
         }
-        for attempt in range(3):
+        keys = max(1, len(self.cfg.model_keys))
+        tries = max(3, keys * 2)
+        reasons = []
+        for attempt in range(tries):
             try:
                 data = self.request("model", "", body=body, model=model)
                 break
@@ -171,11 +185,17 @@ class Gateway:
                         "HTTP 502",
                         "HTTP 429",
                         "cooldown",
+                        "network error",
+                        "key was refused",
                     ]
                 ):
-                    if attempt == 2:
-                        raise
-                    time.sleep(5 * (attempt + 1))
+                    reasons.append(next((c for c in ("HTTP 429", "HTTP 500", "HTTP 502", "HTTP 503") if c in str(e)), "no answer"))
+                    if attempt == tries - 1:
+                        raise ProviderError(
+                            f"Gemini did not answer on any of the {keys} {'key' if keys == 1 else 'keys'} ({', '.join(sorted(set(reasons)))}). Nothing was applied."
+                        ) from None
+                    # The next try goes to the next key. Only a full round waits longer.
+                    time.sleep(5 * (attempt + 1) // keys if (attempt + 1) % keys == 0 else 1)
                 else:
                     raise
         else:
@@ -205,6 +225,6 @@ class Gateway:
             raise ProviderError("Model must return an object")
         return result, {
             "model": model,
-            "thinking": "high",
+            "thinking": self.cfg.thinking,
             "usage": data.get("usageMetadata", {}),
         }

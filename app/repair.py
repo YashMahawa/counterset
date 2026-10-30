@@ -24,10 +24,13 @@ def apply_scenario(day: Day, scenario: dict | None) -> Day:
         if curfew <= max(s["opens"] for s in data["stages"]):
             raise ValueError("That finish time is before the stages open.")
         # The last set really ends by this time, whether it is later or earlier than the stages' hours.
+        end = max(s["closes"] for s in data["stages"])
         for s in data["stages"]:
             s["closes"] = curfew
+        # A later finish opens the extra time to acts only the old end held back. An act's own hours stay.
         for a in data["acts"]:
-            a["latest"] = max(a["latest"], curfew)
+            if a["latest"] >= end:
+                a["latest"] = max(a["latest"], curfew)
     shortest = scenario.get("shortest")
     if shortest and shortest < 100:
         data["allow_trim"] = True
