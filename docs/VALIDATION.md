@@ -75,7 +75,7 @@ Final run on 30 October against the live site, with `LIVE=1`: 66 of 66 checks pa
 - the desk: the agent's steps appear and finish, nothing changes before approval, the as-run view shows 11 cancelled sets, the without-Qloo view opens, and approval publishes a version;
 - the CSV export, an ordinary repair on another day, and no console or page errors.
 
-Result on this build, locally: 190 of 190 checks pass across 1440 and 390 pixels wide, including hover contrast, a failed live run offering a saved run, a double press on approve, and all four saved runs. A live run with questions to the agent was run by hand against real Gemini and Qloo calls.
+Result on this build, against the live site on 30 October: 190 of 190 checks pass across 1440 and 390 pixels wide, including hover contrast, a failed live run offering a saved run, a double press on approve, and all four saved runs. A live run and three questions to the agent were also run on the live site with real Gemini and Qloo calls. The failed run in this test is simulated: the browser is handed a 503 reply, and no real outage has been seen.
 
 Earlier walkthroughs passed on previous designs. They say nothing about this page.
 
