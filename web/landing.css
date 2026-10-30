@@ -348,6 +348,12 @@ legend {
   font-size: var(--step-small);
   color: #bdbdbd;
 }
+.board .row-name {
+  z-index: 2;
+  width: 50px;
+  height: 22px;
+  background: #151515;
+}
 .board .band {
   position: absolute;
   background: #5a2410;
@@ -575,29 +581,6 @@ cite {
 .stage-names button[aria-current="step"] {
   background: var(--ink);
   color: var(--paper);
-}
-
-/* ---------- a real run, moving ---------- */
-.film {
-  background: var(--ink);
-  color: var(--paper);
-  padding: clamp(56px, 8vh, 96px) var(--m);
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 24px;
-  align-items: end;
-}
-.film h2 {
-  grid-column: 1 / 8;
-}
-.film p {
-  grid-column: 9 / 13;
-}
-.film video {
-  grid-column: 1 / 13;
-  width: 100%;
-  height: auto;
-  background: #151515;
 }
 
 /* ---------- why Qloo ---------- */
@@ -849,8 +832,6 @@ details code {
     font-size: 15.5vw;
     margin-top: 14vh;
   }
-  .film h2,
-  .film p,
   .storm-action,
   .storm-say,
   .replay-top h2,

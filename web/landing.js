@@ -14,7 +14,7 @@ const AXIS = 24;
 const LABEL = 54;
 
 function geometry() {
-  const width = Math.max(960, $(".board-wrap").clientWidth);
+  const width = innerWidth < 860 ? 1500 : Math.max(960, $(".board-wrap").clientWidth);
   const from = 12 * 60;
   const to = Math.max(...table.curfews) + 30;
   return { width, from, to, ppm: (width - LABEL) / (to - from) };
@@ -138,7 +138,11 @@ async function startLive() {
     draw();
     // On a phone the timetable scrolls sideways: start where the day restarts.
     const wrap = $(".board-wrap");
-    if (innerWidth < 860) wrap.scrollLeft = LABEL + (table.storm.end - geometry().from) * geometry().ppm - 70;
+    if (innerWidth < 860) wrap.scrollLeft = LABEL + (table.storm.end - geometry().from) * geometry().ppm - 90;
+    // Stage names stay in view while the timetable scrolls sideways.
+    const pin = () => document.querySelectorAll(".row-name").forEach((n) => (n.style.transform = `translateX(${wrap.scrollLeft}px)`));
+    wrap.addEventListener("scroll", pin, { passive: true });
+    pin();
     let timer;
     addEventListener("resize", () => {
       clearTimeout(timer);
@@ -247,7 +251,7 @@ function startMotion() {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   // Each section's parts rise in turn, once. Content is only hidden once script is running.
   const parts = document.querySelectorAll(
-    "section h2:not(.visually-hidden), .film p, .film video, .replay-top p, .replay, .assume, .plain, blockquote, .lede, .jobs article, .fine, .tile, .mosaic figure, .faq details, .end, .stage-ui, #stage-say, .stage-rail, .places, .foot-notes",
+    "section h2:not(.visually-hidden), .replay-top p, .replay, .assume, .plain, blockquote, .lede, .jobs article, .fine, .tile, .mosaic figure, .faq details, .end, .stage-ui, #stage-say, .stage-rail, .places, .foot-notes",
   );
   const seen = new IntersectionObserver(
     (entries) => {
