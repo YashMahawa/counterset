@@ -23,7 +23,7 @@ Counterset is a rescue desk for a festival day.
 
 Replaying Bonnaroo's Sunday with a midnight finish: 24 of 28 sets could have played at full length, against 17 on the day. With sets allowed to shrink to 75%, 27 of 28 could have played, with no shared-crowd clashes. With sets at half length, all 28. This assumes every act was still on site and willing to play less. It shows what was open, not what the festival should have done.
 
-The same desk audits a timetable before it is published, handles a single stage closing or a late flight, and works across musicians, comedians and live podcasts. It is also an MCP server, so another agent can call it.
+Anyone can try it live: paste a lineup, and Qloo looks up and ranks it now, then tell the agent what went wrong and watch it work. The same desk audits a timetable before it is published, handles a single stage closing or a late flight, and works across musicians, comedians and live podcasts. It is also an MCP server, so another agent can call it.
 
 ### How we used Qloo
 
@@ -40,7 +40,7 @@ Every option is solved a second time with Qloo removed, and the app names what c
 - **Agent:** a model chooses tools one at a time in a bounded loop. It can only name terms; it cannot produce a schedule. Quotes must be exact, numbers in its summary must exist in the tool results, and it cannot finish until the comparisons have run. The recorded demo replays its decisions and re-runs every tool live.
 - **Solver:** OR-Tools CP-SAT, solving in order of importance: sets dropped, which sets go, attendee must-sees, shared-crowd clashes, minutes shortened, sets moved. It reports what it proved and what is only the best found in the time allowed. When the rules cannot all hold, it names the ones in conflict.
 - **Validator:** a separate pure-Python recount of every rule and objective. If it disagrees with the solver, the result is refused.
-- **App:** FastAPI, SQLite versioning with stale-proposal checks, and vanilla JavaScript. 53 backend tests, including brute-force checks of the solver, and a real-click browser walkthrough at desktop and phone width.
+- **App:** FastAPI, SQLite versioning with stale-proposal checks, and vanilla JavaScript. 62 backend tests, including brute-force checks of the solver, and a real-click browser walkthrough at desktop and phone width.
 
 ### What we found, and what we didn't
 
@@ -61,6 +61,6 @@ A programmer reviewing these plans without being told which signal produced them
 3. **Watch the agent (45 s).** Press **Watch the agent rebuild that day**. Point at the first failures, then the relaxing. Each step is a real tool call, and the timetable moves.
 4. **What Qloo changed (15 s).** Press **Without Qloo**. Name what it dropped, and the extra clashes.
 5. **A person decides (10 s).** Open the drafted messages, then press **Approve**. Nothing changed until now.
-6. **More than storms (10 s).** Open the Lollapalooza day and show its three clashes, or the Crosswinds bill of music, comedy and podcasts.
+6. **Your own lineup (20 s).** Press **Try your own lineup**, keep the sample, and show Qloo finding the acts and ranking music against comedy live.
 
 All production rules are assumed. No festival or performer is affiliated with the project.

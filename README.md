@@ -14,22 +14,24 @@ Replaying that Sunday on the real timetable, with a midnight finish and sets all
 
 This shows what was open, not what the festival should have done. It assumes every act was still on site and willing to play a shorter set, and the people there knew things this cannot, such as crew hours, mud and flights. The full list of assumptions is below and in the app.
 
-## Judge in 60 seconds
+## Try it
 
-No sign-in, no setup.
+**Live demo: https://counterset-5e45c193.agichaos.dev** (no sign-in). If it has been idle, the first visit takes up to a minute to wake.
 
-1. **Open the public page and change the terms.** Press `00:00` and `75%`. The real timetable rearranges, and the page says what it cost. Press **Show what really happened** to compare.
-2. **Press "Watch the agent rebuild that day"** (`/studio?day=bonnaroo-2026-sunday&watch=1`). It takes about a minute. The model's decisions are recorded, but every tool runs again in front of you, so the solver and validator results are live. Each step moves the timetable.
-3. **Read the recommendation, then press "Without Qloo"** on the timetable. It shows the same rescue with Qloo removed.
-4. **Press "Approve".** The validator rechecks the plan and saves a numbered version. The Approve tab exports it as CSV, and the recommendation holds a message drafted for each act.
-5. **Press "Run it live"** to have the model decide each step now, or edit the message first.
+1. **Try your own lineup.** Press **Try your own lineup** and paste a festival day, or keep the sample. Qloo looks up each act and ranks your bill live, and you check the matches. The timetable shows who shares a crowd and who clashes.
+2. **Break the day.** Open **The agent**, type what went wrong, such as “Sutro stage is closed 17:30 to 18:30”, and press **Run it live**. The real model chooses tools and the solver answers each try. It takes about a minute on a small lineup.
+3. **Compare and decide.** Press **Without Qloo** to see the same rescue with Qloo removed. Press **Approve**, and the validator rechecks the plan and saves a numbered version you can export as CSV.
+4. **See the real storm.** On the public page, change the choices in **Try it** and the Bonnaroo timetable rearranges, or press **Show what really happened** to compare. **Run it live** on that day works too, in about 4 minutes on this small server.
+5. **In a hurry?** **Watch the agent** shows one saved run in about 20 seconds, labelled as saved, and the validator rechecks its final plan.
 6. **From any MCP client,** add `/mcp` and call `rescue_day`.
+
+**Your keys stay on the server.** The Qloo and Gemini keys live in the host's secret settings. They are never sent to the browser, logged or cached with results. Each visitor has hourly caps on live Qloo calls and agent runs, and there is a daily cap across all visitors.
 
 ## What judges are scoring
 
 | Criterion | Where to look |
 | --- | --- |
-| **Technological implementation** | A tool-calling agent over a constraint solver (OR-Tools CP-SAT), with a separate pure-Python validator that recounts every rule and objective. 53 tests, including brute-force checks of the solver. Qloo is used through three endpoints: see [Exactly how Qloo is used](#exactly-how-qloo-is-used). |
+| **Technological implementation** | A tool-calling agent over a constraint solver (OR-Tools CP-SAT), with a separate pure-Python validator that recounts every rule and objective. 62 tests, including brute-force checks of the solver. Qloo is used through three endpoints: see [Exactly how Qloo is used](#exactly-how-qloo-is-used). |
 | **Design** | One flow, from the storm to an approved version. The timetable moves as the agent works. Plain language throughout, with the technical detail one click away. Works at phone width and with reduced motion. |
 | **Potential impact** | A specific person (the festival programmer) and a recurring problem: [seven festivals were hit by weather in 2026 that we found in the press](#why-this-problem). A real day, real timetable and real cancellations, with the limits stated. |
 | **Quality of the idea** | Taste data used to schedule, not to recommend. Qloo decides which sets must not play at once and which set to lose first, across music, comedy and podcasts. Every result can be compared with the same solver without Qloo, and the app says when Qloo changed nothing. |
@@ -67,7 +69,7 @@ If the model fails, nothing is applied and the app says why. “Watch the agent�
 
 ## Exactly how Qloo is used
 
-Every Qloo call is server-side, spaced, counted and cached. Raw responses are never published: the repository holds no Qloo data, and the examples keep only derived ranks and tag names.
+Every Qloo call is server-side, spaced, counted, capped per visitor and cached. A visitor's lineup is looked up and ranked live; the worked examples keep only derived ranks and tag names. Raw responses are never published, and the repository holds no Qloo data.
 
 | Endpoint | Parameters | What it decides |
 | --- | --- | --- |

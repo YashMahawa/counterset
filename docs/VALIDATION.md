@@ -67,7 +67,7 @@ The recording and the stored table were then rebuilt on the final solver. Detail
 
 ## Browser
 
-Final run on 30 October, on the final solver and recording: 32 of 32 checks pass, 16 at each width. The Dockerfile has not been built, because Docker is not installed on the build machine.
+Final run on 30 October against the live site, with `LIVE=1`: see the commit that records it. This run pastes a lineup and uses real Qloo calls and the real model through the real interface. It found a bug that API tests could not: the review dialog closed itself. The container is built by Render from the Dockerfile.
 
 `scripts/browser_test.cjs` drives real clicks at 1440 and 390 wide. It needs a running server, Playwright on `NODE_PATH` and Chrome at `CHROME_PATH`, and it uses recorded decisions with no model. It covers:
 

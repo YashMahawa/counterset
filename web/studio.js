@@ -1090,8 +1090,9 @@ function dialog(title, html, onSubmit) {
     if (e.submitter?.value === "cancel") return;
     e.preventDefault();
     guarded(async () => {
-      if (onSubmit) await onSubmit();
-      d.close();
+      // A step that opens the next dialog returns true, so this one must not close it.
+      const keepOpen = onSubmit ? await onSubmit() : false;
+      if (keepOpen !== true) d.close();
     });
   };
   d.showModal();
@@ -1123,6 +1124,7 @@ function lineupDialog() {
       const r = await job(`/projects/${p.id}/identify`, { version: S.project.version }, "Looking up each act in Qloo…");
       await reload();
       identitiesDialog(r);
+      return true;
     },
   );
 }

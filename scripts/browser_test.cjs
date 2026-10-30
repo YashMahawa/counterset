@@ -71,6 +71,27 @@ const check = (name, ok, more = "") => {
     const csv = fs.readFileSync(await download.path(), "utf8");
     check("desk: CSV export carries status", csv.includes("status") && csv.includes("Noah Kahan"));
 
+    // A visitor's own lineup, live: real Qloo lookups and ranks, then the real model and solver.
+    if (process.env.LIVE) {
+      await page.goto(BASE + "/studio?lineup=1");
+      await page.waitForSelector("#l-text");
+      await page.click('#dialog button.primary');
+      await page.waitForSelector('#dialog [data-direct="yes"]', { timeout: 120000 });
+      check("own lineup: Qloo finds the acts", /Qloo found \d+ of 11 acts/.test(await page.textContent("#dialog-title")), await page.textContent("#dialog-title"));
+      await page.click('#dialog [data-direct="yes"]');
+      await page.waitForFunction(() => document.querySelector("#status")?.textContent.includes("Live Qloo rows loaded"), null, { timeout: 180000 });
+      check("own lineup: live rows load", (await page.locator(".set").count()) === 11);
+      await page.click('#steps button[data-index="0"]');
+      await page.fill("#agent-message", "Sound desk failure: Sutro stage is closed 17:30 to 18:30. Ethel Cain cannot go on before 18:30. What can we do?");
+      await page.click('#step-actions button[data-mode="live"]');
+      await page.waitForFunction(() => document.querySelector("#status")?.textContent.includes("agent has finished"), null, { timeout: 280000 });
+      check("own lineup: live agent finishes with a plan", /of 11 sets play/.test(await page.textContent("#step-finding")), (await page.textContent("#step-finding")).slice(0, 80));
+      await page.screenshot({ path: `test-results/own-${tag}.png` });
+      await page.click('#step-actions button[data-action="publish"]');
+      await page.waitForFunction(() => document.querySelector("#status")?.textContent.includes("Published"), null, { timeout: 30000 });
+      check("own lineup: a person approves it", true);
+    }
+
     await page.goto(BASE + "/studio?day=lollapalooza-2024-saturday");
     await page.waitForSelector(".set");
     await page.click('#steps button[data-index="5"]');
