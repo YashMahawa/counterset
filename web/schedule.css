@@ -117,6 +117,14 @@ h2 {
   font-size: 0.75rem;
   font-weight: 400;
 }
+.tile.narrow {
+  padding: 4px;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.tile.narrow small {
+  display: none;
+}
 .tile.changed {
   background: #a7ff9c;
 }

@@ -28,9 +28,9 @@ function draw(d) {
   board.innerHTML = "";
   const from = Math.floor(Math.min(...d.sets.map((x) => x.start)) / 60) * 60;
   const to = Math.ceil(Math.max(...d.sets.map((x) => x.start + x.length)) / 60) * 60;
-  const room = board.parentElement.clientWidth - LABEL - 16;
+  const room = board.parentElement.clientWidth - LABEL - 40;
   const ppm = Math.max(innerWidth < 860 ? 2 : 1.2, room / (to - from));
-  board.style.width = LABEL + (to - from) * ppm + 16 + "px";
+  board.style.width = LABEL + (to - from) * ppm + 40 + "px";
   board.style.height = AXIS + d.stages.length * ROW + "px";
   for (let t = from; t <= to; t += 60) add(board, "tick", tm(t), { left: LABEL + (t - from) * ppm + "px", top: "0px" });
   d.stages.forEach((s, i) => {
@@ -38,7 +38,8 @@ function draw(d) {
     add(board, "rule", "", { left: "0px", right: "0px", top: AXIS + i * ROW + ROW - 2 + "px" });
   });
   for (const x of d.sets) {
-    const el = add(board, `tile ${x.flag & 1 ? "changed" : ""} ${x.flag & 2 ? "short" : ""}`, x.name, {
+    // A narrow tile keeps the name whole; its time is in the list below.
+    const el = add(board, `tile ${x.flag & 1 ? "changed" : ""} ${x.flag & 2 ? "short" : ""} ${x.length * ppm < 100 ? "narrow" : ""}`, x.name, {
       left: LABEL + (x.start - from) * ppm + "px",
       top: AXIS + x.stage * ROW + "px",
       width: x.length * ppm - 2 + "px",
